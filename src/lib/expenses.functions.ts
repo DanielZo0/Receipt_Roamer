@@ -102,7 +102,7 @@ Return ONLY a single JSON object with exactly these keys: supplier, expense_date
     let extracted: z.infer<typeof ExtractionSchema>;
     try {
       const resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -110,7 +110,8 @@ Return ONLY a single JSON object with exactly these keys: supplier, expense_date
             system_instruction: { parts: [{ text: systemPrompt }] },
             contents: [{ role: "user", parts }],
             generationConfig: {
-              response_mime_type: "application/json",
+              // Note: do NOT set response_mime_type when using inline_data (file) parts —
+              // it conflicts with multimodal requests on some Gemini versions.
               temperature: 0,
             },
           }),
@@ -124,9 +125,16 @@ Return ONLY a single JSON object with exactly these keys: supplier, expense_date
 
       const json = await resp.json();
       // Gemini response shape: { candidates: [{ content: { parts: [{ text: "..." }] } }] }
-      const rawText: string =
-        json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-      const parsed = typeof rawText === "string" ? JSON.parse(rawText) : rawText;
+      // The text may be a JSON string, or already a parsed object depending on the model version.
+      const rawPart = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawPart) {
+        throw new Error(`Gemini returned no content. Full response: ${JSON.stringify(json)}`);
+      }
+      // Strip markdown fences if model wraps output in ```json ... ```
+      const cleaned = typeof rawPart === "string"
+        ? rawPart.replace(/^```[\w]*\n?/m, "").replace(/```$/m, "").trim()
+        : rawPart;
+      const parsed = typeof cleaned === "string" ? JSON.parse(cleaned) : cleaned;
 
       extracted = ExtractionSchema.parse({
         supplier: parsed.supplier ?? null,
@@ -138,16 +146,9 @@ Return ONLY a single JSON object with exactly these keys: supplier, expense_date
         reasoning: parsed.reasoning ?? null,
       });
     } catch (e) {
+      // Re-throw so the UI shows an error toast instead of silently saving a blank row.
       console.error("AI extraction failed", e);
-      extracted = {
-        supplier: null,
-        expense_date: null,
-        amount: null,
-        currency: null,
-        category: null,
-        association_id: null,
-        reasoning: null,
-      };
+      throw new Error(`AI extraction failed: ${(e as Error).message}`);
     }
 
     // Validate association_id exists in our list
