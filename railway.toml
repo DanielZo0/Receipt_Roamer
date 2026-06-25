@@ -1,5 +1,5 @@
 [build]
-builder = "nixpacks"
+builder = "RAILPACK"
 buildCommand = "bun install && bun run build"
 
 [deploy]
