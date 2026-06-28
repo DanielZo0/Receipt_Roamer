@@ -112,6 +112,56 @@ export type Database = {
           },
         ]
       }
+      upload_logs: {
+        Row: {
+          id: string
+          file_name: string
+          file_size: number | null
+          file_mime: string | null
+          status: 'success' | 'error'
+          expense_id: string | null
+          error_message: string | null
+          input_tokens: number | null
+          output_tokens: number | null
+          estimated_cost_usd: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          file_name: string
+          file_size?: number | null
+          file_mime?: string | null
+          status: 'success' | 'error'
+          expense_id?: string | null
+          error_message?: string | null
+          input_tokens?: number | null
+          output_tokens?: number | null
+          estimated_cost_usd?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          file_name?: string
+          file_size?: number | null
+          file_mime?: string | null
+          status?: 'success' | 'error'
+          expense_id?: string | null
+          error_message?: string | null
+          input_tokens?: number | null
+          output_tokens?: number | null
+          estimated_cost_usd?: number | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upload_logs_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

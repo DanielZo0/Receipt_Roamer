@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import { FileText, Home, Upload, Building2, Tag } from "lucide-react";
+import { FileText, Home, Upload, Building2, Tag, ScrollText } from "lucide-react";
+
 
 export function AppNav() {
   const linkBase =
@@ -20,6 +21,9 @@ export function AppNav() {
           </Link>
           <Link to="/upload" className={linkBase} activeProps={activeProps}>
             <Upload className="h-4 w-4" /> Upload
+          </Link>
+          <Link to="/upload-logs" className={linkBase} activeProps={activeProps}>
+            <ScrollText className="h-4 w-4" /> Logs
           </Link>
           <Link to="/expenses" className={linkBase} activeProps={activeProps}>
             <FileText className="h-4 w-4" /> Expenses

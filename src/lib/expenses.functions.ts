@@ -35,6 +35,8 @@ export const extractAndSaveExpense = createServerFn({ method: "POST" })
     z
       .object({
         file_path: z.string(),
+        file_name: z.string(),
+        file_size: z.number().optional(),
         file_mime: z.string(),
         file_base64: z.string(),
       })
@@ -100,6 +102,9 @@ Return ONLY a single JSON object with exactly these keys: supplier, expense_date
     ];
 
     let extracted: z.infer<typeof ExtractionSchema>;
+    let inputTokens: number | null = null;
+    let outputTokens: number | null = null;
+    let estimatedCostUsd: number | null = null;
     try {
       const resp = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -127,6 +132,15 @@ Return ONLY a single JSON object with exactly these keys: supplier, expense_date
       // Gemini response shape: { candidates: [{ content: { parts: [{ text: "..." }] } }] }
       // The text may be a JSON string, or already a parsed object depending on the model version.
       const rawPart = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+      // Capture token usage for cost estimation (hoisted to outer scope for the success log)
+      const usageMeta = json?.usageMetadata as { promptTokenCount?: number; candidatesTokenCount?: number } | undefined;
+      inputTokens = usageMeta?.promptTokenCount ?? null;
+      outputTokens = usageMeta?.candidatesTokenCount ?? null;
+      // Gemini 2.5 Flash pricing: $0.30/1M input tokens, $2.50/1M output tokens (as of mid-2025)
+      estimatedCostUsd =
+        inputTokens != null && outputTokens != null
+          ? (inputTokens / 1_000_000) * 0.3 + (outputTokens / 1_000_000) * 2.5
+          : null;
       if (!rawPart) {
         throw new Error(`Gemini returned no content. Full response: ${JSON.stringify(json)}`);
       }
@@ -146,8 +160,20 @@ Return ONLY a single JSON object with exactly these keys: supplier, expense_date
         reasoning: parsed.reasoning ?? null,
       });
     } catch (e) {
-      // Re-throw so the UI shows an error toast instead of silently saving a blank row.
+      // Log the failure before re-throwing
       console.error("AI extraction failed", e);
+      const sb = getSupabase();
+      await sb.from("upload_logs").insert({
+        file_name: data.file_name,
+        file_size: data.file_size ?? null,
+        file_mime: data.file_mime,
+        status: "error",
+        expense_id: null,
+        error_message: (e as Error).message ?? "Unknown error",
+        input_tokens: null,
+        output_tokens: null,
+        estimated_cost_usd: null,
+      });
       throw new Error(`AI extraction failed: ${(e as Error).message}`);
     }
 
@@ -184,5 +210,19 @@ Return ONLY a single JSON object with exactly these keys: supplier, expense_date
       .single();
 
     if (error) throw new Error(error.message);
+
+    // Write success log
+    await supabase.from("upload_logs").insert({
+      file_name: data.file_name,
+      file_size: data.file_size ?? null,
+      file_mime: data.file_mime,
+      status: "success",
+      expense_id: inserted?.id ?? null,
+      error_message: null,
+      input_tokens: inputTokens!,
+      output_tokens: outputTokens!,
+      estimated_cost_usd: estimatedCostUsd,
+    });
+
     return inserted;
   });

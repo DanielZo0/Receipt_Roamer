@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UploadRouteImport } from './routes/upload'
+import { Route as UploadLogsRouteImport } from './routes/upload-logs'
 import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as CategoriesRouteImport } from './routes/categories'
 import { Route as AssociationsRouteImport } from './routes/associations'
@@ -18,6 +19,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const UploadRoute = UploadRouteImport.update({
   id: '/upload',
   path: '/upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UploadLogsRoute = UploadLogsRouteImport.update({
+  id: '/upload-logs',
+  path: '/upload-logs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExpensesRoute = ExpensesRouteImport.update({
@@ -47,6 +53,7 @@ export interface FileRoutesByFullPath {
   '/categories': typeof CategoriesRoute
   '/expenses': typeof ExpensesRoute
   '/upload': typeof UploadRoute
+  '/upload-logs': typeof UploadLogsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -54,6 +61,7 @@ export interface FileRoutesByTo {
   '/categories': typeof CategoriesRoute
   '/expenses': typeof ExpensesRoute
   '/upload': typeof UploadRoute
+  '/upload-logs': typeof UploadLogsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -62,12 +70,13 @@ export interface FileRoutesById {
   '/categories': typeof CategoriesRoute
   '/expenses': typeof ExpensesRoute
   '/upload': typeof UploadRoute
+  '/upload-logs': typeof UploadLogsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/associations' | '/categories' | '/expenses' | '/upload'
+  fullPaths: '/' | '/associations' | '/categories' | '/expenses' | '/upload' | '/upload-logs'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/associations' | '/categories' | '/expenses' | '/upload'
+  to: '/' | '/associations' | '/categories' | '/expenses' | '/upload' | '/upload-logs'
   id:
     | '__root__'
     | '/'
@@ -75,6 +84,7 @@ export interface FileRouteTypes {
     | '/categories'
     | '/expenses'
     | '/upload'
+    | '/upload-logs'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -83,6 +93,7 @@ export interface RootRouteChildren {
   CategoriesRoute: typeof CategoriesRoute
   ExpensesRoute: typeof ExpensesRoute
   UploadRoute: typeof UploadRoute
+  UploadLogsRoute: typeof UploadLogsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -92,6 +103,13 @@ declare module '@tanstack/react-router' {
       path: '/upload'
       fullPath: '/upload'
       preLoaderRoute: typeof UploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/upload-logs': {
+      id: '/upload-logs'
+      path: '/upload-logs'
+      fullPath: '/upload-logs'
+      preLoaderRoute: typeof UploadLogsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/expenses': {
@@ -131,6 +149,7 @@ const rootRouteChildren: RootRouteChildren = {
   CategoriesRoute: CategoriesRoute,
   ExpensesRoute: ExpensesRoute,
   UploadRoute: UploadRoute,
+  UploadLogsRoute: UploadLogsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

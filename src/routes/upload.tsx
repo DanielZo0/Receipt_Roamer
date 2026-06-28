@@ -1,23 +1,42 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { AppNav } from "@/components/AppNav";
 import { supabase } from "@/integrations/supabase/client";
 import { extractAndSaveExpense } from "@/lib/expenses.functions";
 import { toast } from "sonner";
-import { Upload as UploadIcon, Loader2, CheckCircle2 } from "lucide-react";
+import {
+  Upload as UploadIcon,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  PlusCircle,
+  FileText,
+  Image,
+} from "lucide-react";
 
 export const Route = createFileRoute("/upload")({
   head: () => ({
     meta: [
-      { title: "Upload receipt · Receipt Tracker" },
-      { name: "description", content: "Upload a receipt or bill and extract its data automatically." },
+      { title: "Upload receipts · Receipt Tracker" },
+      { name: "description", content: "Upload receipts or bills and extract their data automatically — supports batch uploading multiple files at once." },
     ],
   }),
   component: UploadPage,
 });
+
+type FileStatus = "queued" | "uploading" | "extracting" | "done" | "error";
+
+interface QueuedFile {
+  id: string;
+  file: File;
+  status: FileStatus;
+  savedId?: string;
+  error?: string;
+}
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -31,127 +50,273 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const MAX_CONCURRENCY = 3;
+const MAX_FILE_SIZE = 15 * 1024 * 1024;
+
+function StatusChip({ status, error }: { status: FileStatus; error?: string }) {
+  if (status === "queued")
+    return (
+      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+        <Clock className="h-3 w-3" /> Queued
+      </span>
+    );
+  if (status === "uploading")
+    return (
+      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400">
+        <Loader2 className="h-3 w-3 animate-spin" /> Uploading
+      </span>
+    );
+  if (status === "extracting")
+    return (
+      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
+        <Loader2 className="h-3 w-3 animate-spin" /> Extracting
+      </span>
+    );
+  if (status === "done")
+    return (
+      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400">
+        <CheckCircle2 className="h-3 w-3" /> Saved
+      </span>
+    );
+  return (
+    <span
+      title={error}
+      className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-destructive/10 text-destructive"
+    >
+      <XCircle className="h-3 w-3" /> Failed
+    </span>
+  );
+}
+
+function FileIcon({ mime }: { mime: string }) {
+  if (mime.startsWith("image/")) return <Image className="h-4 w-4 text-muted-foreground flex-shrink-0" />;
+  return <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />;
+}
+
 function UploadPage() {
   const navigate = useNavigate();
   const extractFn = useServerFn(extractAndSaveExpense);
-  const [status, setStatus] = useState<"idle" | "uploading" | "extracting" | "done">("idle");
-  const [savedId, setSavedId] = useState<string | null>(null);
+  const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const processingRef = useRef(new Set<string>());
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  async function handleFile(file: File) {
-    if (!file) return;
-    if (file.size > 15 * 1024 * 1024) {
-      toast.error("File too large (max 15 MB)");
-      return;
-    }
-    try {
-      setStatus("uploading");
-      const path = `${crypto.randomUUID()}-${file.name.replace(/[^\w.\-]/g, "_")}`;
-      const { error: upErr } = await supabase.storage
-        .from("receipts")
-        .upload(path, file, { contentType: file.type, upsert: false });
-      if (upErr) throw upErr;
+  const updateFile = useCallback((id: string, patch: Partial<QueuedFile>) => {
+    setQueue((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+  }, []);
 
-      setStatus("extracting");
-      const b64 = await fileToBase64(file);
-      const saved = await extractFn({
-        data: { file_path: path, file_mime: file.type, file_base64: b64 },
-      });
-      setSavedId(saved?.id ?? null);
-      setStatus("done");
-      toast.success("Receipt extracted and saved");
-    } catch (e) {
-      console.error(e);
-      toast.error((e as Error).message || "Upload failed");
-      setStatus("idle");
-    }
+  const processFile = useCallback(
+    async (entry: QueuedFile) => {
+      const { file, id } = entry;
+
+      if (file.size > MAX_FILE_SIZE) {
+        updateFile(id, { status: "error", error: "File too large (max 15 MB)" });
+        processingRef.current.delete(id);
+        return;
+      }
+
+      try {
+        updateFile(id, { status: "uploading" });
+        const path = `${crypto.randomUUID()}-${file.name.replace(/[^\w.\-]/g, "_")}`;
+        const { error: upErr } = await supabase.storage
+          .from("receipts")
+          .upload(path, file, { contentType: file.type, upsert: false });
+        if (upErr) throw upErr;
+
+        updateFile(id, { status: "extracting" });
+        const b64 = await fileToBase64(file);
+        const saved = await extractFn({
+          data: {
+            file_path: path,
+            file_name: file.name,
+            file_size: file.size,
+            file_mime: file.type,
+            file_base64: b64,
+          },
+        });
+        updateFile(id, { status: "done", savedId: saved?.id ?? undefined });
+      } catch (e) {
+        const msg = (e as Error).message || "Upload failed";
+        updateFile(id, { status: "error", error: msg });
+      } finally {
+        processingRef.current.delete(id);
+      }
+    },
+    [extractFn, updateFile],
+  );
+
+  // Drain the queue with bounded concurrency (max MAX_CONCURRENCY simultaneous)
+  const drainQueue = useCallback(
+    (newQueue: QueuedFile[]) => {
+      const queued = newQueue.filter(
+        (f) => f.status === "queued" && !processingRef.current.has(f.id),
+      );
+      const available = MAX_CONCURRENCY - processingRef.current.size;
+      const toStart = queued.slice(0, Math.max(0, available));
+      for (const entry of toStart) {
+        processingRef.current.add(entry.id);
+        // When one finishes, kick off the next from whatever is still queued
+        processFile(entry).finally(() => {
+          setQueue((current) => {
+            const stillQueued = current.filter(
+              (f) => f.status === "queued" && !processingRef.current.has(f.id),
+            );
+            if (stillQueued.length > 0) {
+              const next = stillQueued[0];
+              processingRef.current.add(next.id);
+              processFile(next);
+            }
+            return current;
+          });
+        });
+      }
+    },
+    [processFile],
+  );
+
+  function addFiles(files: File[]) {
+    const newEntries: QueuedFile[] = files.map((f) => ({
+      id: crypto.randomUUID(),
+      file: f,
+      status: "queued",
+    }));
+    setQueue((prev) => {
+      const updated = [...prev, ...newEntries];
+      drainQueue(updated);
+      return updated;
+    });
   }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) addFiles(files);
+  }
+
+  function handleInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length) addFiles(files);
+    // Reset so same file can be re-selected
+    e.target.value = "";
+  }
+
+  const doneCount = queue.filter((f) => f.status === "done").length;
+  const failCount = queue.filter((f) => f.status === "error").length;
+  const activeCount = queue.filter(
+    (f) => f.status === "uploading" || f.status === "extracting",
+  ).length;
+  const allFinished = queue.length > 0 && activeCount === 0 && queue.every((f) => f.status === "done" || f.status === "error");
 
   return (
     <div className="min-h-screen bg-background">
       <AppNav />
       <main className="max-w-2xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-2">Upload receipt</h1>
+        <h1 className="text-2xl font-bold mb-1">Upload receipts</h1>
         <p className="text-sm text-muted-foreground mb-6">
-          Drop an image or PDF. AI will extract date, supplier, amount, and pick the best matching association.
+          Drop one or more images or PDFs. AI will extract date, supplier, amount, and pick the best matching association.
         </p>
 
-        {status === "done" ? (
-          <Card className="p-8 text-center space-y-4">
-            <CheckCircle2 className="h-12 w-12 mx-auto text-primary" />
-            <h2 className="text-lg font-semibold">Saved!</h2>
-            <div className="flex gap-2 justify-center">
-              <Button
-                onClick={() => {
-                  setSavedId(null);
-                  setStatus("idle");
-                }}
+        {/* Drop zone */}
+        <Card
+          className={`p-8 border-2 border-dashed text-center transition-colors cursor-pointer mb-4 ${
+            dragOver ? "border-primary bg-accent" : "border-border hover:border-primary/50"
+          }`}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === "Enter" && fileInputRef.current?.click()}
+          aria-label="Upload receipts drop zone"
+        >
+          <UploadIcon className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+          <p className="text-sm text-muted-foreground mb-3">
+            Drag files here, or click to choose
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Images &amp; PDFs · Up to 15 MB each · Multiple files supported
+          </p>
+          <input
+            ref={fileInputRef}
+            id="file-input"
+            type="file"
+            accept="image/*,application/pdf"
+            multiple
+            className="hidden"
+            onChange={handleInput}
+          />
+        </Card>
+
+        {/* Queue list */}
+        {queue.length > 0 && (
+          <Card className="divide-y mb-4">
+            {queue.map((entry) => (
+              <div
+                key={entry.id}
+                className="flex items-center gap-3 px-4 py-3"
               >
-                Upload another
-              </Button>
-              <Button variant="outline" onClick={() => navigate({ to: "/expenses" })}>
-                View expenses
-              </Button>
-            </div>
-            {savedId && (
-              <p className="text-xs text-muted-foreground">
-                You can edit fields on the{" "}
-                <Link to="/expenses" className="underline">
-                  expenses page
-                </Link>
-                .
-              </p>
-            )}
-          </Card>
-        ) : (
-          <Card
-            className={`p-12 border-2 border-dashed text-center transition-colors ${
-              dragOver ? "border-primary bg-accent" : "border-border"
-            }`}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(false);
-              const f = e.dataTransfer.files?.[0];
-              if (f && status === "idle") handleFile(f);
-            }}
-          >
-            {status === "idle" && (
-              <>
-                <UploadIcon className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-                <p className="mb-4 text-sm text-muted-foreground">
-                  Drag a file here, or click to choose
-                </p>
-                <input
-                  id="file-input"
-                  type="file"
-                  accept="image/*,application/pdf"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) handleFile(f);
-                  }}
-                />
-                <Button asChild>
-                  <label htmlFor="file-input" className="cursor-pointer">
-                    Choose file
-                  </label>
-                </Button>
-              </>
-            )}
-            {(status === "uploading" || status === "extracting") && (
-              <div className="flex flex-col items-center gap-3">
-                <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                <p className="text-sm font-medium">
-                  {status === "uploading" ? "Uploading file…" : "Extracting data with AI…"}
-                </p>
+                <FileIcon mime={entry.file.type} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{entry.file.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatBytes(entry.file.size)}
+                    {entry.status === "error" && entry.error && (
+                      <span className="ml-2 text-destructive">{entry.error}</span>
+                    )}
+                  </p>
+                </div>
+                <StatusChip status={entry.status} error={entry.error} />
               </div>
-            )}
+            ))}
           </Card>
+        )}
+
+        {/* Summary bar */}
+        {queue.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted px-4 py-3 text-sm">
+            <span className="text-muted-foreground">
+              {activeCount > 0 && (
+                <span className="mr-3 inline-flex items-center gap-1">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  {activeCount} processing…
+                </span>
+              )}
+              <span className="font-medium text-foreground">{doneCount}/{queue.length} saved</span>
+              {failCount > 0 && (
+                <span className="ml-2 text-destructive">· {failCount} failed</span>
+              )}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                className="gap-1"
+              >
+                <PlusCircle className="h-3.5 w-3.5" /> Add more
+              </Button>
+              {allFinished && (
+                <Button size="sm" onClick={() => navigate({ to: "/expenses" })}>
+                  View expenses
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {allFinished && (
+          <p className="text-xs text-muted-foreground mt-2 text-right">
+            See full history on the{" "}
+            <Link to="/upload-logs" className="underline">upload logs</Link> page.
+          </p>
         )}
       </main>
     </div>
