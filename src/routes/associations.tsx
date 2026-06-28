@@ -6,10 +6,18 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { AppNav } from "@/components/AppNav";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, X, Save } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink, FileText, Pencil, Trash2, Plus, X, Save } from "lucide-react";
 
 export const Route = createFileRoute("/associations")({
   head: () => ({
@@ -45,6 +53,11 @@ function AssociationsPage() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  function toggleExpand(id: string) {
+    setExpandedId((prev) => (prev === id ? null : id));
+  }
 
   const upsert = useMutation({
     mutationFn: async (row: Partial<AssocRow> & { id?: string }) => {
@@ -130,46 +143,67 @@ function AssociationsPage() {
                   saving={upsert.isPending}
                 />
               ) : (
-                <Card key={a.id} className="p-4 flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold">{a.name}</h3>
-                    {a.address && (
-                      <p className="text-sm text-muted-foreground">{a.address}</p>
-                    )}
-                    {a.keywords?.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {a.keywords.map((k) => (
-                          <span
-                            key={k}
-                            className="text-xs bg-secondary text-secondary-foreground rounded px-2 py-0.5"
-                          >
-                            {k}
-                          </span>
-                        ))}
+                <Card key={a.id} className="overflow-hidden">
+                  <div
+                    className="p-4 flex items-start justify-between gap-4 cursor-pointer select-none hover:bg-muted/30 transition-colors"
+                    onClick={(e) => {
+                      // Don't expand if clicking action buttons
+                      if ((e.target as HTMLElement).closest("button")) return;
+                      toggleExpand(a.id);
+                    }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold">{a.name}</h3>
+                        {expandedId === a.id ? (
+                          <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        )}
                       </div>
-                    )}
-                    {a.notes && (
-                      <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">
-                        {a.notes}
-                      </p>
-                    )}
+                      {a.address && (
+                        <p className="text-sm text-muted-foreground">{a.address}</p>
+                      )}
+                      {a.keywords?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {a.keywords.map((k) => (
+                            <span
+                              key={k}
+                              className="text-xs bg-secondary text-secondary-foreground rounded px-2 py-0.5"
+                            >
+                              {k}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {a.notes && (
+                        <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">
+                          {a.notes}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex gap-1">
+                      <Button size="icon" variant="ghost" onClick={() => setEditingId(a.id)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => {
+                          if (confirm(`Delete "${a.name}"? Linked expenses will be kept but unassigned.`)) {
+                            del.mutate(a.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex gap-1">
-                    <Button size="icon" variant="ghost" onClick={() => setEditingId(a.id)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => {
-                        if (confirm(`Delete "${a.name}"? Linked expenses will be kept but unassigned.`)) {
-                          del.mutate(a.id);
-                        }
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  {expandedId === a.id && (
+                    <div className="border-t">
+                      <AssocReceipts associationId={a.id} />
+                    </div>
+                  )}
                 </Card>
               ),
             )}
@@ -185,6 +219,106 @@ function AssociationsPage() {
     </div>
   );
 }
+
+// ─── Receipts panel ───────────────────────────────────────────────────────────
+
+type ExpenseRow = {
+  id: string;
+  supplier: string | null;
+  expense_date: string | null;
+  amount: number | null;
+  currency: string | null;
+  category: string | null;
+  file_path: string | null;
+};
+
+function AssocReceipts({ associationId }: { associationId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["assoc-receipts", associationId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("expenses")
+        .select("id,supplier,expense_date,amount,currency,category,file_path")
+        .eq("association_id", associationId)
+        .order("expense_date", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as ExpenseRow[];
+    },
+  });
+
+  async function openFile(path: string | null) {
+    if (!path) return;
+    const { data, error } = await supabase.storage
+      .from("receipts")
+      .createSignedUrl(path, 60 * 5);
+    if (error || !data?.signedUrl) {
+      toast.error("Could not open file");
+      return;
+    }
+    window.open(data.signedUrl, "_blank");
+  }
+
+  if (isLoading) {
+    return <p className="p-4 text-sm text-muted-foreground">Loading receipts…</p>;
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <p className="p-4 text-sm text-muted-foreground">
+        No receipts assigned to this association yet.
+      </p>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Date</TableHead>
+            <TableHead>Supplier</TableHead>
+            <TableHead>Amount</TableHead>
+            <TableHead>Category</TableHead>
+            <TableHead className="w-10">File</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {data.map((e) => (
+            <TableRow key={e.id}>
+              <TableCell className="text-sm tabular-nums">
+                {e.expense_date ?? "—"}
+              </TableCell>
+              <TableCell className="text-sm">{e.supplier ?? "—"}</TableCell>
+              <TableCell className="text-sm tabular-nums">
+                {e.amount != null
+                  ? `${e.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${e.currency ?? ""}`
+                  : "—"}
+              </TableCell>
+              <TableCell className="text-sm">{e.category ?? "—"}</TableCell>
+              <TableCell>
+                {e.file_path ? (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    onClick={() => openFile(e.file_path)}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Button>
+                ) : (
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+// ─── Edit form ────────────────────────────────────────────────────────────────
 
 function EditCard({
   initial,
