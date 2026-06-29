@@ -11,7 +11,7 @@
  * attachment extraction live in src/lib/email-inbound.server.ts.
  */
 import { handleMailgunWebhook } from "../../src/lib/email-inbound.server";
-import { defineEventHandler, readRawBody, getHeader } from "h3";
+import { defineEventHandler, readRawBody, getHeaders, getRequestURL, setResponseStatus } from "h3";
 
 export default defineEventHandler(async (event) => {
   // Read raw body bytes so we can reconstruct a standard Request for our handler.
