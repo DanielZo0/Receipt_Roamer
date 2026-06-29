@@ -34,6 +34,13 @@ export default defineConfig(async ({ command, mode }) => {
           nitro({
             // "node-server" outputs a portable Node.js server to .output/server/index.mjs
             preset: "node-server",
+            handlers: [
+              {
+                route: "/api/email-inbound",
+                handler: "./server/api/email-inbound.post.ts",
+                method: "post"
+              }
+            ]
           }),
         ]
       : []),
