@@ -13,7 +13,7 @@ export const loginSchema = z.object({
 });
 
 export const loginFn = createServerFn({ method: "POST" })
-  .validator((data: z.infer<typeof loginSchema>) => data)
+  .inputValidator((input: unknown) => loginSchema.parse(input))
   .handler(async ({ data }) => {
     const { email, password } = data;
 
