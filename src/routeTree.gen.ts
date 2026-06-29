@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UploadLogsRouteImport } from './routes/upload-logs'
 import { Route as UploadRouteImport } from './routes/upload'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as CategoriesRouteImport } from './routes/categories'
 import { Route as AssociationsRouteImport } from './routes/associations'
@@ -24,6 +25,11 @@ const UploadLogsRoute = UploadLogsRouteImport.update({
 const UploadRoute = UploadRouteImport.update({
   id: '/upload',
   path: '/upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExpensesRoute = ExpensesRouteImport.update({
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/associations': typeof AssociationsRoute
   '/categories': typeof CategoriesRoute
   '/expenses': typeof ExpensesRoute
+  '/login': typeof LoginRoute
   '/upload': typeof UploadRoute
   '/upload-logs': typeof UploadLogsRoute
 }
@@ -60,6 +67,7 @@ export interface FileRoutesByTo {
   '/associations': typeof AssociationsRoute
   '/categories': typeof CategoriesRoute
   '/expenses': typeof ExpensesRoute
+  '/login': typeof LoginRoute
   '/upload': typeof UploadRoute
   '/upload-logs': typeof UploadLogsRoute
 }
@@ -69,6 +77,7 @@ export interface FileRoutesById {
   '/associations': typeof AssociationsRoute
   '/categories': typeof CategoriesRoute
   '/expenses': typeof ExpensesRoute
+  '/login': typeof LoginRoute
   '/upload': typeof UploadRoute
   '/upload-logs': typeof UploadLogsRoute
 }
@@ -79,6 +88,7 @@ export interface FileRouteTypes {
     | '/associations'
     | '/categories'
     | '/expenses'
+    | '/login'
     | '/upload'
     | '/upload-logs'
   fileRoutesByTo: FileRoutesByTo
@@ -87,6 +97,7 @@ export interface FileRouteTypes {
     | '/associations'
     | '/categories'
     | '/expenses'
+    | '/login'
     | '/upload'
     | '/upload-logs'
   id:
@@ -95,6 +106,7 @@ export interface FileRouteTypes {
     | '/associations'
     | '/categories'
     | '/expenses'
+    | '/login'
     | '/upload'
     | '/upload-logs'
   fileRoutesById: FileRoutesById
@@ -104,6 +116,7 @@ export interface RootRouteChildren {
   AssociationsRoute: typeof AssociationsRoute
   CategoriesRoute: typeof CategoriesRoute
   ExpensesRoute: typeof ExpensesRoute
+  LoginRoute: typeof LoginRoute
   UploadRoute: typeof UploadRoute
   UploadLogsRoute: typeof UploadLogsRoute
 }
@@ -122,6 +135,13 @@ declare module '@tanstack/react-router' {
       path: '/upload'
       fullPath: '/upload'
       preLoaderRoute: typeof UploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/expenses': {
@@ -160,6 +180,7 @@ const rootRouteChildren: RootRouteChildren = {
   AssociationsRoute: AssociationsRoute,
   CategoriesRoute: CategoriesRoute,
   ExpensesRoute: ExpensesRoute,
+  LoginRoute: LoginRoute,
   UploadRoute: UploadRoute,
   UploadLogsRoute: UploadLogsRoute,
 }

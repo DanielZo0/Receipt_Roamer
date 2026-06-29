@@ -73,6 +73,9 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
+import { checkAuthFn } from "../lib/auth";
+import { redirect } from "@tanstack/react-router";
+
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [
@@ -94,6 +97,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
     ],
   }),
+  beforeLoad: async ({ location }) => {
+    // Only check auth if we're not already heading to the login page
+    if (!location.pathname.startsWith("/login")) {
+      const isAuthenticated = await checkAuthFn();
+      if (!isAuthenticated) {
+        throw redirect({
+          to: "/login",
+        });
+      }
+    }
+  },
   shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
