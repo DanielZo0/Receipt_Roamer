@@ -16,6 +16,10 @@ import {
   PlusCircle,
   FileText,
   Image,
+  Mail,
+  Copy,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 export const Route = createFileRoute("/upload")({
@@ -255,6 +259,9 @@ function UploadPage() {
           />
         </Card>
 
+        {/* Email inbound panel */}
+        <EmailInboundPanel />
+
         {/* Queue list */}
         {queue.length > 0 && (
           <Card className="divide-y mb-4">
@@ -320,5 +327,77 @@ function UploadPage() {
         )}
       </main>
     </div>
+  );
+}
+
+// ── Email inbound helper panel ───────────────────────────────────────────────
+
+const INBOUND_EMAIL = import.meta.env.VITE_INBOUND_EMAIL as string | undefined;
+
+function EmailInboundPanel() {
+  const [open, setOpen] = useState(false);
+
+  if (!INBOUND_EMAIL) return null;
+
+  async function copyAddress() {
+    await navigator.clipboard.writeText(INBOUND_EMAIL!);
+    toast.success("Email address copied!");
+  }
+
+  return (
+    <Card className="mb-4 overflow-hidden">
+      {/* Header row — always visible */}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-accent/50 transition-colors"
+        aria-expanded={open}
+      >
+        <span className="flex items-center gap-2 text-sm font-medium">
+          <Mail className="h-4 w-4 text-primary" />
+          Or send receipts by email
+        </span>
+        {open ? (
+          <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+        )}
+      </button>
+
+      {/* Expandable body */}
+      {open && (
+        <div className="border-t px-4 py-4 space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Forward any email containing receipt image(s) or PDF attachment(s) to the address
+            below. AI will extract and save each one automatically — only emails sent from{" "}
+            <span className="font-medium text-foreground">danzammit1@gmail.com</span> are
+            processed.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 rounded-md bg-muted px-3 py-2 text-sm font-mono truncate select-all">
+              {INBOUND_EMAIL}
+            </code>
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-shrink-0 gap-1.5"
+              onClick={copyAddress}
+              title="Copy email address"
+            >
+              <Copy className="h-3.5 w-3.5" />
+              Copy
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Supported formats: JPEG, PNG, WEBP, HEIC, TIFF, GIF, PDF · Max 15 MB per
+            attachment · Results appear in{" "}
+            <Link to="/upload-logs" className="underline">
+              Upload logs
+            </Link>
+            .
+          </p>
+        </div>
+      )}
+    </Card>
   );
 }

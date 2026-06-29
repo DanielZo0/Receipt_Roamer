@@ -18,6 +18,7 @@ import {
   ReceiptText,
   TrendingUp,
   DollarSign,
+  Mail,
 } from "lucide-react";
 
 export const Route = createFileRoute("/upload-logs")({
@@ -41,6 +42,7 @@ type LogRow = {
   input_tokens: number | null;
   output_tokens: number | null;
   estimated_cost_usd: number | null;
+  source: "upload" | "email" | null;
   created_at: string;
   expenses?: {
     supplier: string | null;
@@ -107,7 +109,7 @@ function UploadLogsPage() {
         .from("upload_logs")
         .select(`
           id, file_name, file_size, file_mime, status, expense_id,
-          error_message, input_tokens, output_tokens, estimated_cost_usd, created_at,
+          error_message, input_tokens, output_tokens, estimated_cost_usd, source, created_at,
           expenses ( supplier, amount, currency, expense_date )
         `)
         .order("created_at", { ascending: false })
@@ -257,7 +259,14 @@ function UploadLogsPage() {
                             <p className="font-medium truncate max-w-[180px]" title={log.file_name}>
                               {log.file_name}
                             </p>
-                            <p className="text-xs text-muted-foreground">{formatBytes(log.file_size)}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-xs text-muted-foreground">{formatBytes(log.file_size)}</p>
+                              {log.source === "email" && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                                  <Mail className="h-2.5 w-2.5" /> Email
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>

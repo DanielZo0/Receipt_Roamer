@@ -9,21 +9,21 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as UploadRouteImport } from './routes/upload'
 import { Route as UploadLogsRouteImport } from './routes/upload-logs'
+import { Route as UploadRouteImport } from './routes/upload'
 import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as CategoriesRouteImport } from './routes/categories'
 import { Route as AssociationsRouteImport } from './routes/associations'
 import { Route as IndexRouteImport } from './routes/index'
 
-const UploadRoute = UploadRouteImport.update({
-  id: '/upload',
-  path: '/upload',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const UploadLogsRoute = UploadLogsRouteImport.update({
   id: '/upload-logs',
   path: '/upload-logs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UploadRoute = UploadRouteImport.update({
+  id: '/upload',
+  path: '/upload',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExpensesRoute = ExpensesRouteImport.update({
@@ -74,9 +74,21 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/associations' | '/categories' | '/expenses' | '/upload' | '/upload-logs'
+  fullPaths:
+    | '/'
+    | '/associations'
+    | '/categories'
+    | '/expenses'
+    | '/upload'
+    | '/upload-logs'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/associations' | '/categories' | '/expenses' | '/upload' | '/upload-logs'
+  to:
+    | '/'
+    | '/associations'
+    | '/categories'
+    | '/expenses'
+    | '/upload'
+    | '/upload-logs'
   id:
     | '__root__'
     | '/'
@@ -98,18 +110,18 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/upload': {
-      id: '/upload'
-      path: '/upload'
-      fullPath: '/upload'
-      preLoaderRoute: typeof UploadRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/upload-logs': {
       id: '/upload-logs'
       path: '/upload-logs'
       fullPath: '/upload-logs'
       preLoaderRoute: typeof UploadLogsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/upload': {
+      id: '/upload'
+      path: '/upload'
+      fullPath: '/upload'
+      preLoaderRoute: typeof UploadRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/expenses': {
