@@ -2,6 +2,9 @@ import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Database } from "@/integrations/supabase/types";
+import { loadMasterData } from "@/lib/master-data/loader";
+import { validateExtractedFields, shouldTriggerLLMRecheck } from "@/lib/master-data/deterministic-validation";
+import { matchAssociation, shouldLLMRecheckAssociation } from "@/lib/master-data/association-matching";
 
 function getSupabase() {
   return createClient<Database>(
@@ -30,6 +33,13 @@ const ExtractionSchema = z.object({
   reasoning: z.string().nullable().describe("Brief reason for the chosen association"),
 });
 
+interface AuditTraceEntry {
+  phase: string;
+  timestamp: string;
+  action: string;
+  details: Record<string, unknown>;
+}
+
 export const extractAndSaveExpense = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z
@@ -47,25 +57,28 @@ export const extractAndSaveExpense = createServerFn({ method: "POST" })
     if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
 
     const supabase = getSupabase();
-    const [{ data: associations }, { data: categories }] = await Promise.all([
-      supabase.from("associations").select("id, name, address, keywords, notes"),
-      supabase.from("categories").select("name, keywords").order("name"),
-    ]);
+    
+    // Load master data once at the start
+    const masterData = loadMasterData();
+    const associations = masterData.associations;
+    const categories = masterData.categories;
+    
+    const pipelineTrace: AuditTraceEntry[] = [];
 
-    const list = (associations ?? [])
+    const list = associations
       .map(
         (a) =>
-          `- id=${a.id} | name="${a.name}"${a.address ? ` | address="${a.address}"` : ""}${a.keywords?.length ? ` | keywords=${a.keywords.join(", ")}` : ""}${a.notes ? ` | notes=${a.notes}` : ""}`,
+          `- id=${a.id} | name="${a.name}"${a.address ? ` | address="${a.address}"` : ""}${a.keywords?.length ? ` | keywords=${a.keywords.join(", ")}` : ""}`,
       )
       .join("\n");
 
-    const catList = (categories ?? [])
+    const catList = categories
       .map(
         (c) =>
           `- "${c.name}"${c.keywords?.length ? ` (keywords: ${c.keywords.join(", ")})` : ""}`,
       )
       .join("\n");
-    const catNames = (categories ?? []).map((c) => c.name);
+    const catNames = categories.map((c) => c.name);
 
     const systemPrompt =
       "You are a meticulous accounting assistant that performs OCR and structured extraction on receipts, utility bills, and acknowledgements in any language. You read every visible character before answering and always respond with a single JSON object matching the requested schema. Never invent values — use null when uncertain.";
@@ -89,8 +102,7 @@ ${catList || "(none — return null)"}
 
 Return ONLY a single JSON object with exactly these keys: supplier, expense_date, amount, currency, category, association_id, reasoning. Use null for any field you genuinely cannot determine. Do not wrap the JSON in markdown.`;
 
-    // Build the Gemini API parts array.
-    // Both images and PDFs are passed as inline_data (base64) — Gemini 2.5 Pro handles both natively.
+    // ─── PHASE 1: GEMINI EXTRACTION ────────────────────────────────────────
     const parts: Array<Record<string, unknown>> = [
       { text: systemPrompt + "\n\n" + userPrompt },
       {
@@ -105,6 +117,7 @@ Return ONLY a single JSON object with exactly these keys: supplier, expense_date
     let inputTokens: number | null = null;
     let outputTokens: number | null = null;
     let estimatedCostUsd: number | null = null;
+    
     try {
       const resp = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -115,8 +128,6 @@ Return ONLY a single JSON object with exactly these keys: supplier, expense_date
             system_instruction: { parts: [{ text: systemPrompt }] },
             contents: [{ role: "user", parts }],
             generationConfig: {
-              // Note: do NOT set response_mime_type when using inline_data (file) parts —
-              // it conflicts with multimodal requests on some Gemini versions.
               temperature: 0,
             },
           }),
@@ -129,22 +140,19 @@ Return ONLY a single JSON object with exactly these keys: supplier, expense_date
       }
 
       const json = await resp.json();
-      // Gemini response shape: { candidates: [{ content: { parts: [{ text: "..." }] } }] }
-      // The text may be a JSON string, or already a parsed object depending on the model version.
       const rawPart = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-      // Capture token usage for cost estimation (hoisted to outer scope for the success log)
       const usageMeta = json?.usageMetadata as { promptTokenCount?: number; candidatesTokenCount?: number } | undefined;
       inputTokens = usageMeta?.promptTokenCount ?? null;
       outputTokens = usageMeta?.candidatesTokenCount ?? null;
-      // Gemini 2.5 Flash pricing: $0.30/1M input tokens, $2.50/1M output tokens (as of mid-2025)
       estimatedCostUsd =
         inputTokens != null && outputTokens != null
           ? (inputTokens / 1_000_000) * 0.3 + (outputTokens / 1_000_000) * 2.5
           : null;
+          
       if (!rawPart) {
         throw new Error(`Gemini returned no content. Full response: ${JSON.stringify(json)}`);
       }
-      // Strip markdown fences if model wraps output in ```json ... ```
+      
       const cleaned = typeof rawPart === "string"
         ? rawPart.replace(/^```[\w]*\n?/m, "").replace(/```$/m, "").trim()
         : rawPart;
@@ -159,11 +167,16 @@ Return ONLY a single JSON object with exactly these keys: supplier, expense_date
         association_id: parsed.association_id ?? null,
         reasoning: parsed.reasoning ?? null,
       });
+
+      pipelineTrace.push({
+        phase: "gemini_extraction",
+        timestamp: new Date().toISOString(),
+        action: "extracted_from_gemini",
+        details: { extracted },
+      });
     } catch (e) {
-      // Log the failure before re-throwing
       console.error("AI extraction failed", e);
-      const sb = getSupabase();
-      await sb.from("upload_logs").insert({
+      await supabase.from("upload_logs").insert({
         file_name: data.file_name,
         file_size: data.file_size ?? null,
         file_mime: data.file_mime,
@@ -177,12 +190,53 @@ Return ONLY a single JSON object with exactly these keys: supplier, expense_date
       throw new Error(`AI extraction failed: ${(e as Error).message}`);
     }
 
-    // Validate association_id exists in our list
-    const validIds = new Set((associations ?? []).map((a) => a.id));
-    const assocId =
-      extracted.association_id && validIds.has(extracted.association_id)
-        ? extracted.association_id
-        : null;
+    // ─── PHASE 2: DETERMINISTIC VALIDATION ─────────────────────────────────
+    const validationResult = validateExtractedFields({
+      supplier: extracted.supplier,
+      expense_date: extracted.expense_date,
+      amount: extracted.amount,
+      currency: extracted.currency,
+      category: extracted.category,
+      association_id: extracted.association_id,
+    });
+
+    pipelineTrace.push({
+      phase: "deterministic_validation",
+      timestamp: new Date().toISOString(),
+      action: "validated_extraction",
+      details: {
+        valid: validationResult.valid,
+        errors: validationResult.errors,
+        warnings: validationResult.warnings,
+      },
+    });
+
+    // ─── PHASE 3: RULE-BASED ASSOCIATION MATCHING ──────────────────────────
+    const associationMatch = matchAssociation({
+      supplier: extracted.supplier,
+      postal_code: null,  // TODO: Extract postal code from receipt if available
+      address: null,      // TODO: Extract address from receipt if available
+    });
+
+    // Use deterministic match if confidence exceeds threshold, otherwise use Gemini's suggestion
+    const finalAssociationId = associationMatch.confidence >= 0.6
+      ? associationMatch.association_id
+      : extracted.association_id;
+
+    pipelineTrace.push({
+      phase: "association_matching",
+      timestamp: new Date().toISOString(),
+      action: "matched_association",
+      details: {
+        deterministic_match: associationMatch,
+        gemini_suggestion: extracted.association_id,
+        final_association_id: finalAssociationId,
+      },
+    });
+
+    // Validate that final association ID exists
+    const validIds = new Set(associations.map((a) => a.id));
+    const assocId = finalAssociationId && validIds.has(finalAssociationId) ? finalAssociationId : null;
 
     // Normalise category to one of the known names (case-insensitive)
     let category = extracted.category;
@@ -193,6 +247,7 @@ Return ONLY a single JSON object with exactly these keys: supplier, expense_date
       category = match ?? category;
     }
 
+    // ─── SAVE EXPENSE ──────────────────────────────────────────────────────
     const { data: inserted, error } = await supabase
       .from("expenses")
       .insert({
@@ -211,7 +266,40 @@ Return ONLY a single JSON object with exactly these keys: supplier, expense_date
 
     if (error) throw new Error(error.message);
 
-    // Write success log
+    // ─── LOG TO EXTRACTION AUDIT LOG ──────────────────────────────────────
+    pipelineTrace.push({
+      phase: "expense_saved",
+      timestamp: new Date().toISOString(),
+      action: "saved_to_database",
+      details: {
+        expense_id: inserted?.id,
+        association_id: assocId,
+      },
+    });
+
+    await supabase.from("extraction_audit_log").insert({
+      expense_id: inserted?.id!,
+      file_name: data.file_name,
+      extracted_supplier: extracted.supplier,
+      extracted_expense_date: extracted.expense_date,
+      extracted_amount: extracted.amount,
+      extracted_currency: extracted.currency,
+      extracted_category: extracted.category,
+      extracted_association_id: extracted.association_id,
+      phase: "complete",
+      validation_errors: validationResult.errors.length > 0 ? validationResult.errors : null,
+      validation_warnings: validationResult.warnings.length > 0 ? validationResult.warnings : null,
+      association_match_confidence: associationMatch.confidence,
+      association_match_signals: associationMatch.matched_by,
+      llm_model: "gemini-2.5-flash",
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      estimated_cost_usd: estimatedCostUsd,
+      extraction_reasoning: extracted.reasoning,
+      pipeline_trace: pipelineTrace,
+    });
+
+    // ─── LOG TO UPLOAD LOGS ────────────────────────────────────────────────
     await supabase.from("upload_logs").insert({
       file_name: data.file_name,
       file_size: data.file_size ?? null,
