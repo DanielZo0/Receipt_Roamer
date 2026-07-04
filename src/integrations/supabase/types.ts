@@ -162,6 +162,163 @@ export type Database = {
           },
         ]
       }
+      extraction_audit_log: {
+        Row: {
+          id: string
+          expense_id: string
+          file_name: string | null
+          extracted_supplier: string | null
+          extracted_expense_date: string | null
+          extracted_amount: number | null
+          extracted_currency: string | null
+          extracted_category: string | null
+          extracted_association_id: string | null
+          phase: string
+          validation_errors: Json | null
+          validation_warnings: Json | null
+          association_match_confidence: number | null
+          association_match_signals: string[] | null
+          llm_model: string | null
+          input_tokens: number | null
+          output_tokens: number | null
+          estimated_cost_usd: number | null
+          extraction_reasoning: string | null
+          pipeline_trace: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          expense_id: string
+          file_name?: string | null
+          extracted_supplier?: string | null
+          extracted_expense_date?: string | null
+          extracted_amount?: number | null
+          extracted_currency?: string | null
+          extracted_category?: string | null
+          extracted_association_id?: string | null
+          phase: string
+          validation_errors?: Json | null
+          validation_warnings?: Json | null
+          association_match_confidence?: number | null
+          association_match_signals?: string[] | null
+          llm_model?: string | null
+          input_tokens?: number | null
+          output_tokens?: number | null
+          estimated_cost_usd?: number | null
+          extraction_reasoning?: string | null
+          pipeline_trace?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          expense_id?: string
+          file_name?: string | null
+          extracted_supplier?: string | null
+          extracted_expense_date?: string | null
+          extracted_amount?: number | null
+          extracted_currency?: string | null
+          extracted_category?: string | null
+          extracted_association_id?: string | null
+          phase?: string
+          validation_errors?: Json | null
+          validation_warnings?: Json | null
+          association_match_confidence?: number | null
+          association_match_signals?: string[] | null
+          llm_model?: string | null
+          input_tokens?: number | null
+          output_tokens?: number | null
+          estimated_cost_usd?: number | null
+          extraction_reasoning?: string | null
+          pipeline_trace?: Json | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extraction_audit_log_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expense_corrections: {
+        Row: {
+          id: string
+          expense_id: string
+          field: string
+          original_value: string | null
+          corrected_value: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          expense_id: string
+          field: string
+          original_value?: string | null
+          corrected_value?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          expense_id?: string
+          field?: string
+          original_value?: string | null
+          corrected_value?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_corrections_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      association_rules: {
+        Row: {
+          id: string
+          supplier_pattern: string
+          association_id: string
+          source_expense_id: string | null
+          active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          supplier_pattern: string
+          association_id: string
+          source_expense_id?: string | null
+          active?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          supplier_pattern?: string
+          association_id?: string
+          source_expense_id?: string | null
+          active?: boolean
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "association_rules_association_id_fkey"
+            columns: ["association_id"]
+            isOneToOne: false
+            referencedRelation: "associations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "association_rules_source_expense_id_fkey"
+            columns: ["source_expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

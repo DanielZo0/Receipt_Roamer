@@ -19,10 +19,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
 import { AppNav } from "@/components/AppNav";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Download, Trash2, FileText, ExternalLink } from "lucide-react";
+import { Download, Trash2, FileText, ExternalLink, Info } from "lucide-react";
 
 export const Route = createFileRoute("/expenses")({
   head: () => ({
@@ -44,6 +46,19 @@ type ExpenseRow = {
   category: string | null;
   file_path: string | null;
   file_mime: string | null;
+  created_at: string;
+};
+
+type ValidationIssue = { field: string; value: unknown; reason: string; severity: "error" | "warning" };
+
+type AuditLogRow = {
+  expense_id: string;
+  phase: string;
+  validation_errors: ValidationIssue[] | null;
+  validation_warnings: ValidationIssue[] | null;
+  association_match_confidence: number | null;
+  association_match_signals: string[] | null;
+  extraction_reasoning: string | null;
   created_at: string;
 };
 
@@ -74,6 +89,29 @@ function ExpensesPage() {
     },
   });
 
+  const { data: auditLogs } = useQuery({
+    queryKey: ["extraction-audit-log"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("extraction_audit_log")
+        .select(
+          "expense_id, phase, validation_errors, validation_warnings, association_match_confidence, association_match_signals, extraction_reasoning, created_at",
+        )
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as AuditLogRow[];
+    },
+  });
+
+  // Keep only the most recent audit entry per expense (query is already sorted desc).
+  const auditByExpense = useMemo(() => {
+    const map = new Map<string, AuditLogRow>();
+    for (const row of auditLogs ?? []) {
+      if (!map.has(row.expense_id)) map.set(row.expense_id, row);
+    }
+    return map;
+  }, [auditLogs]);
+
   const [search, setSearch] = useState("");
   const [assocFilter, setAssocFilter] = useState<string>("all");
   const [from, setFrom] = useState("");
@@ -100,10 +138,67 @@ function ExpensesPage() {
   const update = useMutation({
     mutationFn: async (row: Partial<ExpenseRow> & { id: string }) => {
       const { id, ...rest } = row;
+      const original = expenses?.find((e) => e.id === id);
+
       const { error } = await supabase.from("expenses").update(rest).eq("id", id);
       if (error) throw error;
+
+      // Capture each changed field as a correction (Phase 2: human-in-the-loop learning).
+      if (original) {
+        const corrections = Object.entries(rest)
+          .filter(([field, value]) => (original as Record<string, unknown>)[field] !== value)
+          .map(([field, value]) => ({
+            expense_id: id,
+            field,
+            original_value: (original as Record<string, unknown>)[field]?.toString() ?? null,
+            corrected_value: value?.toString() ?? null,
+          }));
+        if (corrections.length > 0) {
+          await supabase.from("expense_corrections").insert(corrections);
+        }
+      }
+
+      return { original, rest };
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["expenses"] }),
+    onSuccess: ({ original, rest }) => {
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+
+      // If the association was corrected, offer to save it as a learned rule.
+      if (
+        original &&
+        "association_id" in rest &&
+        rest.association_id &&
+        rest.association_id !== original.association_id &&
+        original.supplier
+      ) {
+        const supplier = original.supplier;
+        const associationId = rest.association_id as string;
+        const associationName = associations?.find((a) => a.id === associationId)?.name ?? "this association";
+        const pattern = supplier.toLowerCase().trim();
+        const matchCount =
+          expenses?.filter((e) => e.id !== original.id && e.supplier?.toLowerCase().includes(pattern)).length ?? 0;
+
+        toast(`Always match "${supplier}" to ${associationName}?`, {
+          description: matchCount > 0 ? `Also matches ${matchCount} other expense${matchCount === 1 ? "" : "s"}.` : undefined,
+          action: {
+            label: "Save rule",
+            onClick: async () => {
+              const { error } = await supabase.from("association_rules").insert({
+                supplier_pattern: pattern,
+                association_id: associationId,
+                source_expense_id: original.id,
+              });
+              if (error) {
+                // Unique constraint violation just means the rule already exists.
+                if (error.code !== "23505") toast.error(error.message);
+              } else {
+                toast.success("Rule saved");
+              }
+            },
+          },
+        });
+      }
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -197,19 +292,20 @@ function ExpensesPage() {
                 <TableHead>Category</TableHead>
                 <TableHead>Association</TableHead>
                 <TableHead>File</TableHead>
+                <TableHead>Details</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     Loading…
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     No expenses match.
                   </TableCell>
                 </TableRow>
@@ -300,6 +396,9 @@ function ExpensesPage() {
                       )}
                     </TableCell>
                     <TableCell>
+                      <ExtractionDetails audit={auditByExpense.get(e.id) ?? null} />
+                    </TableCell>
+                    <TableCell>
                       <Button
                         size="icon"
                         variant="ghost"
@@ -318,5 +417,63 @@ function ExpensesPage() {
         </Card>
       </main>
     </div>
+  );
+}
+
+function ExtractionDetails({ audit }: { audit: AuditLogRow | null }) {
+  if (!audit) {
+    return <span className="text-muted-foreground text-xs">—</span>;
+  }
+
+  const errorCount = audit.validation_errors?.length ?? 0;
+  const warningCount = audit.validation_warnings?.length ?? 0;
+  const confidence = audit.association_match_confidence;
+  const rechecked = audit.phase === "llm_recheck";
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button size="icon" variant="ghost" className="relative">
+          <Info className="h-4 w-4" />
+          {(errorCount > 0 || warningCount > 0) && (
+            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-destructive" />
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="space-y-2 text-sm">
+        <div className="flex flex-wrap gap-1">
+          {rechecked && <Badge variant="secondary">Re-checked by LLM</Badge>}
+          {confidence != null && (
+            <Badge variant="outline">
+              Association match: {(confidence * 100).toFixed(0)}%
+            </Badge>
+          )}
+          {errorCount > 0 && <Badge variant="destructive">{errorCount} error{errorCount === 1 ? "" : "s"}</Badge>}
+          {warningCount > 0 && <Badge variant="secondary">{warningCount} warning{warningCount === 1 ? "" : "s"}</Badge>}
+        </div>
+
+        {audit.association_match_signals && audit.association_match_signals.length > 0 && (
+          <p className="text-muted-foreground text-xs">
+            Matched by: {audit.association_match_signals.join(", ")}
+          </p>
+        )}
+
+        {audit.extraction_reasoning && (
+          <p className="text-xs">{audit.extraction_reasoning}</p>
+        )}
+
+        {(errorCount > 0 || warningCount > 0) && (
+          <ul className="text-xs space-y-0.5 border-t pt-1.5">
+            {[...(audit.validation_errors ?? []), ...(audit.validation_warnings ?? [])].map(
+              (issue, i) => (
+                <li key={i} className={issue.severity === "error" ? "text-destructive" : "text-muted-foreground"}>
+                  {issue.field}: {issue.reason}
+                </li>
+              ),
+            )}
+          </ul>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }

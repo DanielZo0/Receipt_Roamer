@@ -11,8 +11,10 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UploadLogsRouteImport } from './routes/upload-logs'
 import { Route as UploadRouteImport } from './routes/upload'
+import { Route as RulesRouteImport } from './routes/rules'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ExpensesRouteImport } from './routes/expenses'
+import { Route as CorrectionsRouteImport } from './routes/corrections'
 import { Route as CategoriesRouteImport } from './routes/categories'
 import { Route as AssociationsRouteImport } from './routes/associations'
 import { Route as IndexRouteImport } from './routes/index'
@@ -27,6 +29,11 @@ const UploadRoute = UploadRouteImport.update({
   path: '/upload',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RulesRoute = RulesRouteImport.update({
+  id: '/rules',
+  path: '/rules',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -35,6 +42,11 @@ const LoginRoute = LoginRouteImport.update({
 const ExpensesRoute = ExpensesRouteImport.update({
   id: '/expenses',
   path: '/expenses',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CorrectionsRoute = CorrectionsRouteImport.update({
+  id: '/corrections',
+  path: '/corrections',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CategoriesRoute = CategoriesRouteImport.update({
@@ -57,8 +69,10 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/associations': typeof AssociationsRoute
   '/categories': typeof CategoriesRoute
+  '/corrections': typeof CorrectionsRoute
   '/expenses': typeof ExpensesRoute
   '/login': typeof LoginRoute
+  '/rules': typeof RulesRoute
   '/upload': typeof UploadRoute
   '/upload-logs': typeof UploadLogsRoute
 }
@@ -66,8 +80,10 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/associations': typeof AssociationsRoute
   '/categories': typeof CategoriesRoute
+  '/corrections': typeof CorrectionsRoute
   '/expenses': typeof ExpensesRoute
   '/login': typeof LoginRoute
+  '/rules': typeof RulesRoute
   '/upload': typeof UploadRoute
   '/upload-logs': typeof UploadLogsRoute
 }
@@ -76,8 +92,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/associations': typeof AssociationsRoute
   '/categories': typeof CategoriesRoute
+  '/corrections': typeof CorrectionsRoute
   '/expenses': typeof ExpensesRoute
   '/login': typeof LoginRoute
+  '/rules': typeof RulesRoute
   '/upload': typeof UploadRoute
   '/upload-logs': typeof UploadLogsRoute
 }
@@ -87,8 +105,10 @@ export interface FileRouteTypes {
     | '/'
     | '/associations'
     | '/categories'
+    | '/corrections'
     | '/expenses'
     | '/login'
+    | '/rules'
     | '/upload'
     | '/upload-logs'
   fileRoutesByTo: FileRoutesByTo
@@ -96,8 +116,10 @@ export interface FileRouteTypes {
     | '/'
     | '/associations'
     | '/categories'
+    | '/corrections'
     | '/expenses'
     | '/login'
+    | '/rules'
     | '/upload'
     | '/upload-logs'
   id:
@@ -105,8 +127,10 @@ export interface FileRouteTypes {
     | '/'
     | '/associations'
     | '/categories'
+    | '/corrections'
     | '/expenses'
     | '/login'
+    | '/rules'
     | '/upload'
     | '/upload-logs'
   fileRoutesById: FileRoutesById
@@ -115,8 +139,10 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AssociationsRoute: typeof AssociationsRoute
   CategoriesRoute: typeof CategoriesRoute
+  CorrectionsRoute: typeof CorrectionsRoute
   ExpensesRoute: typeof ExpensesRoute
   LoginRoute: typeof LoginRoute
+  RulesRoute: typeof RulesRoute
   UploadRoute: typeof UploadRoute
   UploadLogsRoute: typeof UploadLogsRoute
 }
@@ -137,6 +163,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UploadRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/rules': {
+      id: '/rules'
+      path: '/rules'
+      fullPath: '/rules'
+      preLoaderRoute: typeof RulesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -149,6 +182,13 @@ declare module '@tanstack/react-router' {
       path: '/expenses'
       fullPath: '/expenses'
       preLoaderRoute: typeof ExpensesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/corrections': {
+      id: '/corrections'
+      path: '/corrections'
+      fullPath: '/corrections'
+      preLoaderRoute: typeof CorrectionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/categories': {
@@ -179,8 +219,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AssociationsRoute: AssociationsRoute,
   CategoriesRoute: CategoriesRoute,
+  CorrectionsRoute: CorrectionsRoute,
   ExpensesRoute: ExpensesRoute,
   LoginRoute: LoginRoute,
+  RulesRoute: RulesRoute,
   UploadRoute: UploadRoute,
   UploadLogsRoute: UploadLogsRoute,
 }
