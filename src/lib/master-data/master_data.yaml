@@ -1,0 +1,364 @@
+# Master Data Configuration for Receipt Extraction Pipeline
+#
+# This file drives all domain knowledge for receipt processing:
+# - Association definitions and matching rules
+# - Category classification rules
+# - Validation constraints
+# - Extraction confidence thresholds
+#
+# Changes here do NOT require code deployment — validation engine reads this at runtime.
+
+version: "1.0"
+description: "Receipt Roamer master data configuration"
+
+# ─── ASSOCIATIONS ──────────────────────────────────────────────────────────
+# Define all suppliers/merchants that can be linked to expenses.
+# keywords: Used for fast matching before LLM
+# postal_codes: Postal code prefixes for address-based matching (e.g., "CH-" matches Switzerland)
+# address_patterns: Regex patterns to match in address fields (optional)
+# validation_rules: Constraints specific to this association (e.g., typical amount range)
+#
+associations:
+  - id: "assoc_example_uber"
+    name: "Uber Technologies"
+    keywords:
+      - uber
+      - ubereats
+      - ride
+      - uber.com
+    postal_codes: []
+    address_patterns: []
+    category_hint: "Transport"
+    typical_amount_range:
+      min: 0
+      max: 200
+    validation_rules:
+      - "amount should be positive and reasonable (typically <200)"
+      - "date should be recent or within last 6 months"
+
+  - id: "assoc_example_coffee"
+    name: "Café du Centre"
+    keywords:
+      - café du centre
+      - cafe centre
+      - espresso
+      - coffee
+    postal_codes:
+      - "1200"  # Postal code prefix for matching
+    address_patterns:
+      - "(?i)rue.*de.*la.*paix"  # Regex: insensitive match for street address
+    category_hint: "Meals & Drinks"
+    typical_amount_range:
+      min: 0
+      max: 50
+    validation_rules:
+      - "amount should be small (typically <50)"
+
+# ─── CATEGORIES ───────────────────────────────────────────────────────────
+# Classification categories for expenses.
+# keywords: Used for matching supplier name + line items
+# validation_rules: Constraints (e.g., amount range sanity checks)
+#
+categories:
+  - name: "Transport"
+    keywords:
+      - taxi
+      - uber
+      - bus
+      - train
+      - airline
+      - fuel
+      - car rental
+      - parking
+      - transit
+    validation_rules:
+      amount_range:
+        min: 0
+        max: 5000
+      must_have_date: true
+
+  - name: "Meals & Drinks"
+    keywords:
+      - restaurant
+      - café
+      - coffee
+      - cafe
+      - espresso
+      - pizza
+      - lunch
+      - dinner
+      - breakfast
+      - bar
+      - wine
+    validation_rules:
+      amount_range:
+        min: 0
+        max: 500
+      must_have_date: true
+
+  - name: "Utilities"
+    keywords:
+      - electricity
+      - water
+      - gas
+      - internet
+      - telecom
+      - phone
+      - power
+      - provider
+    validation_rules:
+      amount_range:
+        min: 0
+        max: 2000
+      must_have_date: true
+
+  - name: "Office Supplies"
+    keywords:
+      - office
+      - supplies
+      - stationery
+      - printer
+      - paper
+      - pen
+      - desk
+      - stationary
+    validation_rules:
+      amount_range:
+        min: 0
+        max: 1000
+      must_have_date: true
+
+  - name: "Software & Services"
+    keywords:
+      - software
+      - app
+      - subscription
+      - saas
+      - cloud
+      - hosting
+      - domain
+      - license
+      - adobe
+      - microsoft
+    validation_rules:
+      amount_range:
+        min: 0
+        max: 2000
+      must_have_date: true
+
+  - name: "Cleaning & Maintenance"
+    keywords:
+      - cleaning
+      - maintenance
+      - repair
+      - fix
+      - handyman
+      - plumber
+      - electrician
+      - janitor
+    validation_rules:
+      amount_range:
+        min: 0
+        max: 2000
+      must_have_date: true
+
+  - name: "Insurance"
+    keywords:
+      - insurance
+      - premium
+      - policy
+      - coverage
+      - claim
+      - insurer
+    validation_rules:
+      amount_range:
+        min: 0
+        max: 5000
+      must_have_date: true
+
+  - name: "Taxes"
+    keywords:
+      - tax
+      - revenue
+      - customs
+      - duty
+      - vat
+      - income tax
+      - filing
+    validation_rules:
+      amount_range:
+        min: 0
+        max: 10000
+      must_have_date: true
+
+  - name: "Other"
+    keywords: []  # Catch-all category
+    validation_rules:
+      amount_range:
+        min: 0
+        max: 100000
+      must_have_date: true
+
+# ─── EXTRACTION VALIDATION RULES ───────────────────────────────────────────
+# Global validation constraints applied to ALL extracted receipts.
+#
+validation:
+  # Phase 2: Deterministic validation (before Gemini)
+  deterministic_checks:
+    supplier:
+      must_not_be_empty: true
+      min_length: 2
+      max_length: 256
+
+    expense_date:
+      must_not_be_empty: true
+      format: "YYYY-MM-DD"
+      # Reject dates too old (older than 2 years) or in the future
+      not_before: "-2 years"
+      not_after: "+1 day"
+
+    amount:
+      must_be_positive: true
+      max_amount: 100000  # Sanity check: flag amounts over 100k
+      warn_if_over: 10000  # Log warning for very large amounts
+
+    currency:
+      must_not_be_empty: true
+      allowed_codes:
+        - EUR
+        - USD
+        - GBP
+        - CHF
+        - JPY
+        - CAD
+        - AUD
+        - NZD
+        - SGD
+        - HKD
+        - CNY
+        - INR
+        - MXN
+        - BRL
+        - ZAR
+        - SEK
+        - NOK
+        - DKK
+
+  # Phase 3: Association matching confidence thresholds
+  association_matching:
+    keyword_match_threshold: 0.7  # 70% match strength triggers association
+    exact_name_match: 1.0  # Exact name is 100% confident
+    postal_code_match: 0.8  # Postal code match is 80% confident
+    address_pattern_match: 0.75  # Regex pattern match is 75% confident
+    combined_threshold: 0.6  # Multiple weak signals → 60% confidence
+
+  # Phase 4: LLM re-check thresholds (when to ask Gemini again)
+  llm_recheck:
+    association_confidence_threshold: 0.7  # If below this, ask LLM
+    category_confidence_threshold: 0.6
+    # If any field failed Phase 2 validation, ask LLM
+
+# ─── CURRENCY CONVERSION (Optional) ────────────────────────────────────────
+# Map symbols and patterns to ISO 4217 codes
+#
+currency_mappings:
+  symbols:
+    "€": EUR
+    "$": USD  # Ambiguous — prefer USD but check locale
+    "£": GBP
+    "¥": JPY
+    "₹": INR
+    "₽": RUB
+    "₩": KRW
+    "฿": THB
+  
+  locale_hints:
+    "en_US": USD
+    "en_GB": GBP
+    "de_DE": EUR
+    "de_CH": CHF
+    "fr_CH": CHF
+    "it_CH": CHF
+    "fr_FR": EUR
+    "es_ES": EUR
+    "ja_JP": JPY
+
+# ─── DATE PARSING RULES ────────────────────────────────────────────────────
+# Hints for parsing dates in different locales/formats
+#
+date_parsing:
+  formats:
+    - "YYYY-MM-DD"      # ISO standard
+    - "DD/MM/YYYY"      # European
+    - "MM/DD/YYYY"      # American
+    - "YYYY-MM-DD HH:mm"  # With time
+    - "D MMMM YYYY"     # Text month
+    - "DD.MM.YYYY"      # German/Swiss
+  
+  month_names:
+    en:
+      - January
+      - February
+      - March
+      - April
+      - May
+      - June
+      - July
+      - August
+      - September
+      - October
+      - November
+      - December
+    de:
+      - Januar
+      - Februar
+      - März
+      - April
+      - Mai
+      - Juni
+      - Juli
+      - August
+      - September
+      - Oktober
+      - November
+      - Dezember
+    fr:
+      - janvier
+      - février
+      - mars
+      - avril
+      - mai
+      - juin
+      - juillet
+      - août
+      - septembre
+      - octobre
+      - novembre
+      - décembre
+
+# ─── EXTRACTION RULES (FUTURE: Learn-discovered rules) ─────────────────────
+# This section will be auto-populated as users provide corrections.
+# Format: Each rule gets a SHA-256 hash ID, timestamp, and SME approval status.
+#
+rule_base: []
+# Example structure (to be generated by learning phase):
+# - id: "rule_abc123def456"
+#   phase: "association_matching"
+#   created_at: "2025-01-15T10:30:00Z"
+#   created_by: "user@example.com"
+#   description: "If supplier text contains 'CAFÉ S.A.R.L' AND postal starts with '1200', match café du centre"
+#   conditions:
+#     - field: "supplier"
+#       operator: "contains"
+#       value: "CAFÉ S.A.R.L"
+#       case_insensitive: true
+#     - field: "postal_code"
+#       operator: "startswith"
+#       value: "1200"
+#   action: "set_association_id"
+#   action_value: "assoc_example_coffee"
+#   confidence: 0.95
+#   impact_score: 0.92  # How many past receipts it would affect positively
+#   approved: true
+#   approved_by: "sme@example.com"
+#   approved_at: "2025-01-15T11:00:00Z"
