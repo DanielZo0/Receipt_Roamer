@@ -28,30 +28,28 @@ export const extractAndSaveExpense = createServerFn({ method: "POST" })
     const supabase = getSupabase();
 
     try {
-      const { expense, inputTokens, outputTokens, estimatedCostUsd } = await runExtractionPipeline(
-        supabase,
-        {
+      const { expenses, ledgerGroupId, totalMismatch, inputTokens, outputTokens, estimatedCostUsd } =
+        await runExtractionPipeline(supabase, {
           fileName: data.file_name,
           fileMime: data.file_mime,
           fileBase64: data.file_base64,
           filePath: data.file_path,
           fileSize: data.file_size ?? null,
-        },
-      );
+        });
 
       await supabase.from("upload_logs").insert({
         file_name: data.file_name,
         file_size: data.file_size ?? null,
         file_mime: data.file_mime,
         status: "success",
-        expense_id: expense.id,
+        expense_id: expenses[0].id,
         error_message: null,
         input_tokens: inputTokens,
         output_tokens: outputTokens,
         estimated_cost_usd: estimatedCostUsd,
       });
 
-      return expense;
+      return { expenses, ledgerGroupId, totalMismatch };
     } catch (e) {
       console.error("AI extraction failed", e);
       await supabase.from("upload_logs").insert({

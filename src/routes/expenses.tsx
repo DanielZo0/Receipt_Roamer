@@ -59,6 +59,7 @@ type AuditLogRow = {
   association_match_confidence: number | null;
   association_match_signals: string[] | null;
   extraction_reasoning: string | null;
+  possible_duplicate_of: string | null;
   created_at: string;
 };
 
@@ -95,7 +96,7 @@ function ExpensesPage() {
       const { data, error } = await supabase
         .from("extraction_audit_log")
         .select(
-          "expense_id, phase, validation_errors, validation_warnings, association_match_confidence, association_match_signals, extraction_reasoning, created_at",
+          "expense_id, phase, validation_errors, validation_warnings, association_match_confidence, association_match_signals, extraction_reasoning, possible_duplicate_of, created_at",
         )
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -190,6 +191,40 @@ function ExpensesPage() {
               });
               if (error) {
                 // Unique constraint violation just means the rule already exists.
+                if (error.code !== "23505") toast.error(error.message);
+              } else {
+                toast.success("Rule saved");
+              }
+            },
+          },
+        });
+      }
+
+      // If the category was corrected, offer to save it as a learned rule.
+      if (
+        original &&
+        "category" in rest &&
+        rest.category &&
+        rest.category !== original.category &&
+        original.supplier
+      ) {
+        const supplier = original.supplier;
+        const category = rest.category as string;
+        const pattern = supplier.toLowerCase().trim();
+        const matchCount =
+          expenses?.filter((e) => e.id !== original.id && e.supplier?.toLowerCase().includes(pattern)).length ?? 0;
+
+        toast(`Always categorize "${supplier}" as ${category}?`, {
+          description: matchCount > 0 ? `Also matches ${matchCount} other expense${matchCount === 1 ? "" : "s"}.` : undefined,
+          action: {
+            label: "Save rule",
+            onClick: async () => {
+              const { error } = await supabase.from("category_rules").insert({
+                supplier_pattern: pattern,
+                category,
+                source_expense_id: original.id,
+              });
+              if (error) {
                 if (error.code !== "23505") toast.error(error.message);
               } else {
                 toast.success("Rule saved");
@@ -396,7 +431,12 @@ function ExpensesPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <ExtractionDetails audit={auditByExpense.get(e.id) ?? null} />
+                      <ExtractionDetails
+                        audit={auditByExpense.get(e.id) ?? null}
+                        duplicateExpense={
+                          expenses?.find((x) => x.id === auditByExpense.get(e.id)?.possible_duplicate_of) ?? null
+                        }
+                      />
                     </TableCell>
                     <TableCell>
                       <Button
@@ -420,7 +460,13 @@ function ExpensesPage() {
   );
 }
 
-function ExtractionDetails({ audit }: { audit: AuditLogRow | null }) {
+function ExtractionDetails({
+  audit,
+  duplicateExpense,
+}: {
+  audit: AuditLogRow | null;
+  duplicateExpense: ExpenseRow | null;
+}) {
   if (!audit) {
     return <span className="text-muted-foreground text-xs">—</span>;
   }
@@ -429,19 +475,21 @@ function ExtractionDetails({ audit }: { audit: AuditLogRow | null }) {
   const warningCount = audit.validation_warnings?.length ?? 0;
   const confidence = audit.association_match_confidence;
   const rechecked = audit.phase === "llm_recheck";
+  const isDuplicate = !!audit.possible_duplicate_of;
 
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Button size="icon" variant="ghost" className="relative">
           <Info className="h-4 w-4" />
-          {(errorCount > 0 || warningCount > 0) && (
+          {(errorCount > 0 || warningCount > 0 || isDuplicate) && (
             <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-destructive" />
           )}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="space-y-2 text-sm">
         <div className="flex flex-wrap gap-1">
+          {isDuplicate && <Badge variant="destructive">Possible duplicate</Badge>}
           {rechecked && <Badge variant="secondary">Re-checked by LLM</Badge>}
           {confidence != null && (
             <Badge variant="outline">
@@ -451,6 +499,13 @@ function ExtractionDetails({ audit }: { audit: AuditLogRow | null }) {
           {errorCount > 0 && <Badge variant="destructive">{errorCount} error{errorCount === 1 ? "" : "s"}</Badge>}
           {warningCount > 0 && <Badge variant="secondary">{warningCount} warning{warningCount === 1 ? "" : "s"}</Badge>}
         </div>
+
+        {isDuplicate && (
+          <p className="text-xs text-muted-foreground">
+            Matches an existing expense
+            {duplicateExpense ? ` from ${duplicateExpense.expense_date ?? "an unknown date"} (${duplicateExpense.supplier ?? "same supplier"})` : ""}.
+          </p>
+        )}
 
         {audit.association_match_signals && audit.association_match_signals.length > 0 && (
           <p className="text-muted-foreground text-xs">

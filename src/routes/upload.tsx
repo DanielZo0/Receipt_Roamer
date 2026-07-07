@@ -1,8 +1,17 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useState, useRef, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { AppNav } from "@/components/AppNav";
 import { supabase } from "@/integrations/supabase/client";
 import { extractAndSaveExpense } from "@/lib/expenses.functions";
@@ -20,7 +29,15 @@ import {
   Copy,
   ChevronDown,
   ChevronUp,
+  AlertTriangle,
 } from "lucide-react";
+
+interface LedgerLineRow {
+  id: string;
+  supplier: string | null;
+  amount: number | null;
+  association_id: string | null;
+}
 
 export const Route = createFileRoute("/upload")({
   head: () => ({
@@ -38,7 +55,9 @@ interface QueuedFile {
   id: string;
   file: File;
   status: FileStatus;
-  savedId?: string;
+  savedIds?: string[];
+  ledgerGroupId?: string | null;
+  totalMismatch?: { grandTotal: number; sumOfLineItems: number } | null;
   error?: string;
 }
 
@@ -63,7 +82,15 @@ function formatBytes(bytes: number): string {
 const MAX_CONCURRENCY = 3;
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
 
-function StatusChip({ status, error }: { status: FileStatus; error?: string }) {
+function StatusChip({
+  status,
+  error,
+  savedCount,
+}: {
+  status: FileStatus;
+  error?: string;
+  savedCount?: number;
+}) {
   if (status === "queued")
     return (
       <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
@@ -85,7 +112,8 @@ function StatusChip({ status, error }: { status: FileStatus; error?: string }) {
   if (status === "done")
     return (
       <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400">
-        <CheckCircle2 className="h-3 w-3" /> Saved
+        <CheckCircle2 className="h-3 w-3" />
+        {savedCount && savedCount > 1 ? `Saved ${savedCount} line items` : "Saved"}
       </span>
     );
   return (
@@ -101,6 +129,121 @@ function StatusChip({ status, error }: { status: FileStatus; error?: string }) {
 function FileIcon({ mime }: { mime: string }) {
   if (mime.startsWith("image/")) return <Image className="h-4 w-4 text-muted-foreground flex-shrink-0" />;
   return <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />;
+}
+
+function LedgerAwareQueueRow({ entry }: { entry: QueuedFile }) {
+  const [open, setOpen] = useState(false);
+  const isLedger = entry.status === "done" && (entry.savedIds?.length ?? 0) > 1;
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 px-4 py-3">
+        <FileIcon mime={entry.file.type} />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{entry.file.name}</p>
+          <p className="text-xs text-muted-foreground">
+            {formatBytes(entry.file.size)}
+            {entry.status === "error" && entry.error && (
+              <span className="ml-2 text-destructive">{entry.error}</span>
+            )}
+          </p>
+        </div>
+        <StatusChip status={entry.status} error={entry.error} savedCount={entry.savedIds?.length} />
+        {isLedger && (
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="text-muted-foreground hover:text-foreground"
+            aria-label="Toggle line item review"
+          >
+            {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+        )}
+      </div>
+      {isLedger && entry.totalMismatch && (
+        <div className="mx-4 mb-3 flex items-start gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+          <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+          <span>
+            Line items sum to {entry.totalMismatch.sumOfLineItems.toFixed(2)} but the document
+            states a total of {entry.totalMismatch.grandTotal.toFixed(2)} — please review below.
+          </span>
+        </div>
+      )}
+      {isLedger && open && <LedgerLineItemsReview expenseIds={entry.savedIds ?? []} />}
+    </div>
+  );
+}
+
+function LedgerLineItemsReview({ expenseIds }: { expenseIds: string[] }) {
+  const { data: associations } = useQuery({
+    queryKey: ["associations"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("associations").select("id,name").order("name");
+      if (error) throw error;
+      return data as { id: string; name: string }[];
+    },
+  });
+
+  const { data: lines, refetch } = useQuery({
+    queryKey: ["ledger-line-items", expenseIds],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("expenses")
+        .select("id, supplier, amount, association_id")
+        .in("id", expenseIds)
+        .order("source_line_index", { ascending: true });
+      if (error) throw error;
+      return data as LedgerLineRow[];
+    },
+    enabled: expenseIds.length > 0,
+  });
+
+  async function updateLine(id: string, patch: Partial<LedgerLineRow>) {
+    const { error } = await supabase.from("expenses").update(patch).eq("id", id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    refetch();
+  }
+
+  return (
+    <div className="mx-4 mb-3 border rounded-md divide-y">
+      {(lines ?? []).map((line) => (
+        <div key={line.id} className="flex items-center gap-2 px-3 py-2">
+          <span className="flex-1 min-w-0 text-sm truncate" title={line.supplier ?? ""}>
+            {line.supplier || "—"}
+          </span>
+          <Input
+            type="number"
+            step="0.01"
+            defaultValue={line.amount ?? ""}
+            onBlur={(ev) => {
+              const v = ev.target.value ? Number(ev.target.value) : null;
+              if (v !== line.amount) updateLine(line.id, { amount: v });
+            }}
+            className="w-24"
+          />
+          <Select
+            value={line.association_id ?? "none"}
+            onValueChange={(v) => updateLine(line.id, { association_id: v === "none" ? null : v })}
+          >
+            <SelectTrigger className="min-w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">— unassigned —</SelectItem>
+              {associations?.map((a) => (
+                <SelectItem key={a.id} value={a.id}>
+                  {a.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function UploadPage() {
@@ -144,7 +287,12 @@ function UploadPage() {
             file_base64: b64,
           },
         });
-        updateFile(id, { status: "done", savedId: saved?.id ?? undefined });
+        updateFile(id, {
+          status: "done",
+          savedIds: saved?.expenses?.map((e) => e.id) ?? [],
+          ledgerGroupId: saved?.ledgerGroupId ?? null,
+          totalMismatch: saved?.totalMismatch ?? null,
+        });
       } catch (e) {
         const msg = (e as Error).message || "Upload failed";
         updateFile(id, { status: "error", error: msg });
@@ -266,22 +414,7 @@ function UploadPage() {
         {queue.length > 0 && (
           <Card className="divide-y mb-4">
             {queue.map((entry) => (
-              <div
-                key={entry.id}
-                className="flex items-center gap-3 px-4 py-3"
-              >
-                <FileIcon mime={entry.file.type} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{entry.file.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatBytes(entry.file.size)}
-                    {entry.status === "error" && entry.error && (
-                      <span className="ml-2 text-destructive">{entry.error}</span>
-                    )}
-                  </p>
-                </div>
-                <StatusChip status={entry.status} error={entry.error} />
-              </div>
+              <LedgerAwareQueueRow key={entry.id} entry={entry} />
             ))}
           </Card>
         )}

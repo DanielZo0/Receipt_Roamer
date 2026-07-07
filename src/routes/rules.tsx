@@ -20,13 +20,13 @@ export const Route = createFileRoute("/rules")({
   head: () => ({
     meta: [
       { title: "Learned Rules · Receipt Tracker" },
-      { name: "description", content: "Rules learned from manual association corrections." },
+      { name: "description", content: "Rules learned from manual association and category corrections." },
     ],
   }),
   component: RulesPage,
 });
 
-type RuleRow = {
+type AssociationRuleRow = {
   id: string;
   supplier_pattern: string;
   association_id: string;
@@ -34,9 +34,15 @@ type RuleRow = {
   created_at: string;
 };
 
-function RulesPage() {
-  const qc = useQueryClient();
+type CategoryRuleRow = {
+  id: string;
+  supplier_pattern: string;
+  category: string;
+  active: boolean;
+  created_at: string;
+};
 
+function RulesPage() {
   const { data: associations } = useQuery({
     queryKey: ["associations"],
     queryFn: async () => {
@@ -46,6 +52,39 @@ function RulesPage() {
     },
   });
 
+  return (
+    <div className="min-h-screen bg-background">
+      <AppNav />
+      <main className="max-w-4xl mx-auto px-4 py-8 space-y-10">
+        <div>
+          <h1 className="text-2xl font-bold">Learned Rules</h1>
+          <p className="text-sm text-muted-foreground">
+            Rules saved from manual corrections on the Expenses page. Active rules are applied automatically
+            before the AI is asked to guess.
+          </p>
+        </div>
+
+        <section>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+            Association rules
+          </h2>
+          <AssociationRulesTable associations={associations ?? []} />
+        </section>
+
+        <section>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+            Category rules
+          </h2>
+          <CategoryRulesTable />
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function AssociationRulesTable({ associations }: { associations: { id: string; name: string }[] }) {
+  const qc = useQueryClient();
+
   const { data: rules, isLoading } = useQuery({
     queryKey: ["association-rules"],
     queryFn: async () => {
@@ -54,7 +93,7 @@ function RulesPage() {
         .select("id, supplier_pattern, association_id, active, created_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as RuleRow[];
+      return data as AssociationRuleRow[];
     },
   });
 
@@ -79,72 +118,150 @@ function RulesPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const assocName = (id: string) => associations?.find((a) => a.id === id)?.name ?? "—";
+  const assocName = (id: string) => associations.find((a) => a.id === id)?.name ?? "—";
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">Learned Rules</h1>
-          <p className="text-sm text-muted-foreground">
-            Rules saved from manual association corrections on the Expenses page. Active rules are applied
-            automatically before the AI is asked to guess.
-          </p>
-        </div>
-
-        <Card className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Supplier contains</TableHead>
-                <TableHead>Association</TableHead>
-                <TableHead>Active</TableHead>
-                <TableHead></TableHead>
+    <Card className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Supplier contains</TableHead>
+            <TableHead>Association</TableHead>
+            <TableHead>Active</TableHead>
+            <TableHead></TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {isLoading ? (
+            <TableRow>
+              <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                Loading…
+              </TableCell>
+            </TableRow>
+          ) : !rules || rules.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                No rules yet. Correct an expense's association on the Expenses page and choose "Save rule".
+              </TableCell>
+            </TableRow>
+          ) : (
+            rules.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell className="font-mono text-sm">{r.supplier_pattern}</TableCell>
+                <TableCell>{assocName(r.association_id)}</TableCell>
+                <TableCell>
+                  <Switch
+                    checked={r.active}
+                    onCheckedChange={(checked) => toggleActive.mutate({ id: r.id, active: checked })}
+                  />
+                </TableCell>
+                <TableCell>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => {
+                      if (confirm("Delete this rule?")) del.mutate(r.id);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                    Loading…
-                  </TableCell>
-                </TableRow>
-              ) : !rules || rules.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                    No rules yet. Correct an expense's association on the Expenses page and choose "Save rule".
-                  </TableCell>
-                </TableRow>
-              ) : (
-                rules.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-mono text-sm">{r.supplier_pattern}</TableCell>
-                    <TableCell>{assocName(r.association_id)}</TableCell>
-                    <TableCell>
-                      <Switch
-                        checked={r.active}
-                        onCheckedChange={(checked) => toggleActive.mutate({ id: r.id, active: checked })}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          if (confirm("Delete this rule?")) del.mutate(r.id);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </Card>
-      </main>
-    </div>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </Card>
+  );
+}
+
+function CategoryRulesTable() {
+  const qc = useQueryClient();
+
+  const { data: rules, isLoading } = useQuery({
+    queryKey: ["category-rules"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("category_rules")
+        .select("id, supplier_pattern, category, active, created_at")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as CategoryRuleRow[];
+    },
+  });
+
+  const toggleActive = useMutation({
+    mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
+      const { error } = await supabase.from("category_rules").update({ active }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["category-rules"] }),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const del = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("category_rules").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["category-rules"] });
+      toast.success("Rule deleted");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Card className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Supplier contains</TableHead>
+            <TableHead>Category</TableHead>
+            <TableHead>Active</TableHead>
+            <TableHead></TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {isLoading ? (
+            <TableRow>
+              <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                Loading…
+              </TableCell>
+            </TableRow>
+          ) : !rules || rules.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                No rules yet. Correct an expense's category on the Expenses page and choose "Save rule".
+              </TableCell>
+            </TableRow>
+          ) : (
+            rules.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell className="font-mono text-sm">{r.supplier_pattern}</TableCell>
+                <TableCell>{r.category}</TableCell>
+                <TableCell>
+                  <Switch
+                    checked={r.active}
+                    onCheckedChange={(checked) => toggleActive.mutate({ id: r.id, active: checked })}
+                  />
+                </TableCell>
+                <TableCell>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => {
+                      if (confirm("Delete this rule?")) del.mutate(r.id);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </Card>
   );
 }

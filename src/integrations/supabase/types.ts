@@ -73,7 +73,9 @@ export type Database = {
           file_mime: string | null
           file_path: string | null
           id: string
+          ledger_group_id: string | null
           raw_extraction: Json | null
+          source_line_index: number | null
           supplier: string | null
         }
         Insert: {
@@ -86,7 +88,9 @@ export type Database = {
           file_mime?: string | null
           file_path?: string | null
           id?: string
+          ledger_group_id?: string | null
           raw_extraction?: Json | null
+          source_line_index?: number | null
           supplier?: string | null
         }
         Update: {
@@ -99,7 +103,9 @@ export type Database = {
           file_mime?: string | null
           file_path?: string | null
           id?: string
+          ledger_group_id?: string | null
           raw_extraction?: Json | null
+          source_line_index?: number | null
           supplier?: string | null
         }
         Relationships: [
@@ -184,6 +190,7 @@ export type Database = {
           estimated_cost_usd: number | null
           extraction_reasoning: string | null
           pipeline_trace: Json | null
+          possible_duplicate_of: string | null
           created_at: string
         }
         Insert: {
@@ -207,6 +214,7 @@ export type Database = {
           estimated_cost_usd?: number | null
           extraction_reasoning?: string | null
           pipeline_trace?: Json | null
+          possible_duplicate_of?: string | null
           created_at?: string
         }
         Update: {
@@ -230,12 +238,20 @@ export type Database = {
           estimated_cost_usd?: number | null
           extraction_reasoning?: string | null
           pipeline_trace?: Json | null
+          possible_duplicate_of?: string | null
           created_at?: string
         }
         Relationships: [
           {
             foreignKeyName: "extraction_audit_log_expense_id_fkey"
             columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "extraction_audit_log_possible_duplicate_of_fkey"
+            columns: ["possible_duplicate_of"]
             isOneToOne: false
             referencedRelation: "expenses"
             referencedColumns: ["id"]
@@ -312,6 +328,41 @@ export type Database = {
           },
           {
             foreignKeyName: "association_rules_source_expense_id_fkey"
+            columns: ["source_expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      category_rules: {
+        Row: {
+          id: string
+          supplier_pattern: string
+          category: string
+          source_expense_id: string | null
+          active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          supplier_pattern: string
+          category: string
+          source_expense_id?: string | null
+          active?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          supplier_pattern?: string
+          category?: string
+          source_expense_id?: string | null
+          active?: boolean
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "category_rules_source_expense_id_fkey"
             columns: ["source_expense_id"]
             isOneToOne: false
             referencedRelation: "expenses"

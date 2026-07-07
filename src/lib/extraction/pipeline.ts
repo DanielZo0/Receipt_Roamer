@@ -3,37 +3,15 @@ import type { Database } from "@/integrations/supabase/types";
 import { buildExtractionPrompt, callGeminiForExtraction, type Extraction } from "./gemini";
 import { validateExtractedFields, shouldTriggerLLMRecheck, type ValidationError } from "./validation";
 import {
-  matchAssociation,
   shouldLLMRecheckAssociation,
+  matchAssociationWithLearnedRules,
   type AssociationRow,
-  type AssociationMatchResult,
 } from "./association-matching";
-import { matchLearnedRule, type AssociationRuleRow } from "./learned-rules";
+import { type AssociationRuleRow } from "./learned-rules";
+import { matchLearnedCategoryRule, type CategoryRuleRow } from "./learned-category-rules";
 import { recheckExtraction } from "./llm-recheck";
-
-/**
- * Combines Phase 3 (heuristic keyword/exact-name matching) with learned rules
- * from prior user corrections. A learned-rule hit is treated as certain
- * (confidence 1.0) and takes priority over the heuristic match.
- */
-function matchAssociationWithLearnedRules(
-  supplier: string | null,
-  associations: AssociationRow[],
-  learnedRules: AssociationRuleRow[],
-): AssociationMatchResult {
-  const learned = matchLearnedRule(supplier, learnedRules);
-  if (learned.association_id) {
-    const assoc = associations.find((a) => a.id === learned.association_id);
-    return {
-      association_id: learned.association_id,
-      association_name: assoc?.name ?? null,
-      confidence: 1.0,
-      reasons: [`Matched learned rule: "${learned.matched_pattern}"`],
-      matched_by: [`learned_rule(${learned.matched_pattern})`],
-    };
-  }
-  return matchAssociation({ supplier }, associations);
-}
+import { findPossibleDuplicate } from "./duplicate-detection";
+import { matchLineItem } from "./ledger-line-matching";
 
 export interface RunExtractionPipelineParams {
   fileName: string;
@@ -44,7 +22,13 @@ export interface RunExtractionPipelineParams {
 }
 
 export interface RunExtractionPipelineResult {
+  /** First inserted row — kept for backward compat with single-receipt callers. */
   expense: Database["public"]["Tables"]["expenses"]["Row"];
+  /** All rows inserted for this upload (length 1 for a normal single receipt). */
+  expenses: Database["public"]["Tables"]["expenses"]["Row"][];
+  ledgerGroupId: string | null;
+  /** Difference between the document's stated grand total and the sum of line items (null if not a ledger, or no grand total was found). */
+  totalMismatch: { grandTotal: number; sumOfLineItems: number } | null;
   inputTokens: number | null;
   outputTokens: number | null;
   estimatedCostUsd: number | null;
@@ -72,14 +56,17 @@ export async function runExtractionPipeline(
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
 
-  const [{ data: associationRows }, { data: categoryRows }, { data: ruleRows }] = await Promise.all([
-    supabase.from("associations").select("id, name, address, keywords, notes"),
-    supabase.from("categories").select("name, keywords").order("name"),
-    supabase.from("association_rules").select("id, supplier_pattern, association_id, active").eq("active", true),
-  ]);
+  const [{ data: associationRows }, { data: categoryRows }, { data: ruleRows }, { data: categoryRuleRows }] =
+    await Promise.all([
+      supabase.from("associations").select("id, name, address, keywords, notes"),
+      supabase.from("categories").select("name, keywords").order("name"),
+      supabase.from("association_rules").select("id, supplier_pattern, association_id, active").eq("active", true),
+      supabase.from("category_rules").select("id, supplier_pattern, category, active").eq("active", true),
+    ]);
   const associations: AssociationRow[] = associationRows ?? [];
   const categories = categoryRows ?? [];
   const learnedRules: AssociationRuleRow[] = ruleRows ?? [];
+  const learnedCategoryRules: CategoryRuleRow[] = categoryRuleRows ?? [];
 
   const file = { mime: params.fileMime, base64: params.fileBase64 };
 
@@ -91,6 +78,20 @@ export async function runExtractionPipeline(
     userPrompt,
     file,
   });
+
+  // ─── Multi-line ledger path: fan out into one expense per line item ─────
+  if (extracted.document_type === "multi_line_ledger" && extracted.line_items?.length) {
+    return runLedgerBranch(supabase, params, {
+      extracted,
+      associations,
+      learnedRules,
+      learnedCategoryRules,
+      categories,
+      inputTokens,
+      outputTokens,
+      estimatedCostUsd,
+    });
+  }
 
   // ─── Phase 2: Deterministic validation ──────────────────────────────────
   let validation = validateExtractedFields(extracted);
@@ -137,6 +138,19 @@ export async function runExtractionPipeline(
     category = match ?? category;
   }
 
+  // Learned category rules take priority over Gemini's guess.
+  const learnedCategoryMatch = matchLearnedCategoryRule(extracted.supplier, learnedCategoryRules);
+  if (learnedCategoryMatch.category) {
+    category = learnedCategoryMatch.category;
+  }
+
+  // Duplicate-receipt detection: same supplier + amount within +/-1 day of an existing expense.
+  const possibleDuplicateOf = await findPossibleDuplicate(supabase, {
+    supplier: extracted.supplier,
+    amount: extracted.amount,
+    expenseDate: extracted.expense_date,
+  });
+
   const { data: inserted, error } = await supabase
     .from("expenses")
     .insert({
@@ -168,9 +182,140 @@ export async function runExtractionPipeline(
     inputTokens,
     outputTokens,
     estimatedCostUsd,
+    possibleDuplicateOf,
   });
 
-  return { expense: inserted, inputTokens, outputTokens, estimatedCostUsd };
+  return {
+    expense: inserted,
+    expenses: [inserted],
+    ledgerGroupId: null,
+    totalMismatch: null,
+    inputTokens,
+    outputTokens,
+    estimatedCostUsd,
+  };
+}
+
+/**
+ * Multi-line ledger branch: inserts one expenses row per line item, each
+ * independently matched to an association/category. Skips the Phase 4 LLM
+ * recheck (cost control) — low-confidence line items are left unassigned
+ * for manual review in the upload UI instead.
+ */
+async function runLedgerBranch(
+  supabase: SupabaseClient<Database>,
+  params: RunExtractionPipelineParams,
+  ctx: {
+    extracted: Extraction;
+    associations: AssociationRow[];
+    learnedRules: AssociationRuleRow[];
+    learnedCategoryRules: CategoryRuleRow[];
+    categories: { name: string; keywords: string[] }[];
+    inputTokens: number | null;
+    outputTokens: number | null;
+    estimatedCostUsd: number | null;
+  },
+): Promise<RunExtractionPipelineResult> {
+  const { extracted, associations, learnedRules, learnedCategoryRules, categories, inputTokens, outputTokens, estimatedCostUsd } = ctx;
+  const lineItems = extracted.line_items ?? [];
+  const ledgerGroupId = crypto.randomUUID();
+  const catNames = categories.map((c) => c.name);
+
+  const insertedRows: Database["public"]["Tables"]["expenses"]["Row"][] = [];
+
+  for (let i = 0; i < lineItems.length; i++) {
+    const lineItem = lineItems[i];
+    const expenseDate = lineItem.expense_date ?? extracted.expense_date;
+    const currency = lineItem.currency ?? extracted.currency;
+
+    const { associationMatch, category: matchedCategory } = matchLineItem(
+      lineItem.supplier,
+      associations,
+      learnedRules,
+      learnedCategoryRules,
+      null,
+    );
+
+    let category = matchedCategory;
+    if (category && catNames.length) {
+      const match = catNames.find((n) => n.toLowerCase() === category!.toLowerCase());
+      category = match ?? category;
+    }
+
+    const possibleDuplicateOf = await findPossibleDuplicate(supabase, {
+      supplier: lineItem.supplier,
+      amount: lineItem.amount,
+      expenseDate,
+    });
+
+    const rawExtraction = {
+      document_type: extracted.document_type,
+      grand_total: extracted.grand_total,
+      ledger_group_id: ledgerGroupId,
+      line_item: lineItem,
+    };
+
+    const { data: inserted, error } = await supabase
+      .from("expenses")
+      .insert({
+        association_id: associationMatch.association_id,
+        supplier: lineItem.supplier,
+        expense_date: expenseDate,
+        amount: lineItem.amount,
+        currency,
+        category,
+        file_path: params.filePath,
+        file_mime: params.fileMime,
+        raw_extraction: rawExtraction as never,
+        ledger_group_id: ledgerGroupId,
+        source_line_index: i,
+      })
+      .select()
+      .single();
+
+    if (error || !inserted) {
+      throw new Error(error?.message ?? `Failed to insert ledger line item ${i}`);
+    }
+    insertedRows.push(inserted);
+
+    await writeAuditLog(supabase, {
+      expenseId: inserted.id,
+      fileName: params.fileName,
+      extracted: {
+        ...extracted,
+        supplier: lineItem.supplier,
+        expense_date: expenseDate,
+        amount: lineItem.amount,
+        currency,
+        category,
+        association_id: associationMatch.association_id,
+      },
+      validation: { valid: true, errors: [], warnings: [] },
+      ruleMatch: associationMatch,
+      recheckPerformed: false,
+      llmModel: "gemini-2.5-flash",
+      inputTokens: i === 0 ? inputTokens : null,
+      outputTokens: i === 0 ? outputTokens : null,
+      estimatedCostUsd: i === 0 ? estimatedCostUsd : null,
+      possibleDuplicateOf,
+    });
+  }
+
+  const sumOfLineItems = lineItems.reduce((sum, li) => sum + (li.amount ?? 0), 0);
+  const totalMismatch =
+    extracted.grand_total != null && Math.abs(extracted.grand_total - sumOfLineItems) > 0.01
+      ? { grandTotal: extracted.grand_total, sumOfLineItems }
+      : null;
+
+  return {
+    expense: insertedRows[0],
+    expenses: insertedRows,
+    ledgerGroupId,
+    totalMismatch,
+    inputTokens,
+    outputTokens,
+    estimatedCostUsd,
+  };
 }
 
 async function writeAuditLog(
@@ -186,10 +331,22 @@ async function writeAuditLog(
     inputTokens: number | null;
     outputTokens: number | null;
     estimatedCostUsd: number | null;
+    possibleDuplicateOf: string | null;
   },
 ) {
-  const { expenseId, fileName, extracted, validation, ruleMatch, recheckPerformed, llmModel, inputTokens, outputTokens, estimatedCostUsd } =
-    params;
+  const {
+    expenseId,
+    fileName,
+    extracted,
+    validation,
+    ruleMatch,
+    recheckPerformed,
+    llmModel,
+    inputTokens,
+    outputTokens,
+    estimatedCostUsd,
+    possibleDuplicateOf,
+  } = params;
 
   const { error } = await supabase.from("extraction_audit_log").insert({
     expense_id: expenseId,
@@ -210,7 +367,8 @@ async function writeAuditLog(
     output_tokens: outputTokens,
     estimated_cost_usd: estimatedCostUsd,
     extraction_reasoning: extracted.reasoning,
-    pipeline_trace: { validation, ruleMatch, recheckPerformed } as never,
+    pipeline_trace: { validation, ruleMatch, recheckPerformed, possibleDuplicateOf } as never,
+    possible_duplicate_of: possibleDuplicateOf,
   } as never);
 
   if (error) {
