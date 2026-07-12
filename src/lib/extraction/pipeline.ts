@@ -144,11 +144,12 @@ export async function runExtractionPipeline(
     category = learnedCategoryMatch.category;
   }
 
-  // Duplicate-receipt detection: same supplier + amount within +/-1 day of an existing expense.
+  // Duplicate-receipt detection: same reference number, or same supplier + amount within +/-1 day of an existing expense.
   const possibleDuplicateOf = await findPossibleDuplicate(supabase, {
     supplier: extracted.supplier,
     amount: extracted.amount,
     expenseDate: extracted.expense_date,
+    referenceNumber: extracted.reference_number,
   });
 
   const { data: inserted, error } = await supabase
@@ -160,6 +161,7 @@ export async function runExtractionPipeline(
       amount: extracted.amount,
       currency: extracted.currency,
       category,
+      reference_number: extracted.reference_number,
       file_path: params.filePath,
       file_mime: params.fileMime,
       raw_extraction: extracted as never,
@@ -246,6 +248,7 @@ async function runLedgerBranch(
       supplier: lineItem.supplier,
       amount: lineItem.amount,
       expenseDate,
+      referenceNumber: lineItem.reference_number,
     });
 
     const rawExtraction = {
@@ -264,6 +267,7 @@ async function runLedgerBranch(
         amount: lineItem.amount,
         currency,
         category,
+        reference_number: lineItem.reference_number,
         file_path: params.filePath,
         file_mime: params.fileMime,
         raw_extraction: rawExtraction as never,
@@ -289,6 +293,7 @@ async function runLedgerBranch(
         currency,
         category,
         association_id: associationMatch.association_id,
+        reference_number: lineItem.reference_number,
       },
       validation: { valid: true, errors: [], warnings: [] },
       ruleMatch: associationMatch,
@@ -357,6 +362,7 @@ async function writeAuditLog(
     extracted_currency: extracted.currency,
     extracted_category: extracted.category,
     extracted_association_id: extracted.association_id,
+    extracted_reference_number: extracted.reference_number,
     phase: recheckPerformed ? "llm_recheck" : "llm_extraction",
     validation_errors: validation.errors.length ? (validation.errors as never) : null,
     validation_warnings: validation.warnings.length ? (validation.warnings as never) : null,

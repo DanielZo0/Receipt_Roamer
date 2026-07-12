@@ -9,6 +9,7 @@ export const LedgerLineItemSchema = z.object({
     .describe("Date for this line item in YYYY-MM-DD format, if present on the line; otherwise null"),
   currency: z.string().nullable().describe("ISO 4217 currency code for this line item, e.g. EUR, USD"),
   notes: z.string().nullable().describe("Raw text of the line (e.g. day numbers like \"3-10-17-24\"), for audit purposes"),
+  reference_number: z.string().nullable().describe("Invoice/order/reference number for this line item, if present; otherwise null"),
 });
 
 export type LedgerLineItem = z.infer<typeof LedgerLineItemSchema>;
@@ -33,6 +34,10 @@ export const ExtractionSchema = z.object({
     .string()
     .nullable()
     .describe("UUID of the best-matching association from the provided list, or null"),
+  reference_number: z
+    .string()
+    .nullable()
+    .describe("Invoice/receipt/order/reference number as printed on the document, or null"),
   reasoning: z.string().nullable().describe("Brief reason for the chosen association"),
   line_items: z
     .array(LedgerLineItemSchema)
@@ -124,6 +129,7 @@ export async function callGeminiForExtraction(params: {
     currency: parsed.currency ?? null,
     category: parsed.category ?? null,
     association_id: parsed.association_id ?? null,
+    reference_number: parsed.reference_number ?? null,
     reasoning: parsed.reasoning ?? null,
     line_items: Array.isArray(parsed.line_items)
       ? parsed.line_items.map((li: Record<string, unknown>) => ({
@@ -132,6 +138,7 @@ export async function callGeminiForExtraction(params: {
           expense_date: (li.expense_date as string) ?? null,
           currency: (li.currency as string) ?? null,
           notes: (li.notes as string) ?? null,
+          reference_number: (li.reference_number as string) ?? null,
         }))
       : null,
     grand_total: parsed.grand_total == null ? null : Number(parsed.grand_total),
@@ -185,6 +192,7 @@ If document_type is "single_receipt", extract these fields (as before):
 - currency: ISO 4217 code (EUR, USD, GBP, CHF...). Infer from the symbol (€=EUR, $=USD, £=GBP) or country if not explicit.
 - category: pick the SINGLE best matching category from the list below by comparing the supplier name and line items against each category's name and keywords. If nothing fits, use "Other" (or null if "Other" is not in the list).
 - association_id: pick the SINGLE best matching association from the list below by comparing the bill's supplier, addressee, billing address, postal code, references, or any keyword. If no association clearly matches, set null — do not guess.
+- reference_number: the invoice/receipt/order/reference number as printed (e.g. "Invoice #INV-2024-001", "Ref: 883921", "Order No. 12345"). Use null if none is present. Do not confuse with a customer account number or barcode.
 - reasoning: 1-2 sentences explaining which clues led to the association choice (or why none matched).
 Leave line_items and grand_total null.
 
@@ -194,6 +202,7 @@ If document_type is "multi_line_ledger", instead populate line_items: one entry 
 - expense_date: a per-line date if one is written on that row, formatted YYYY-MM-DD; otherwise null (a document-level date will be used as fallback if you can find one).
 - currency: the currency for that line if inferable, otherwise null (a document-level currency will be used as fallback).
 - notes: the raw text of the line item that isn't the name/amount (e.g. day numbers like "3-10-17-24" or "18"), for audit purposes.
+- reference_number: an invoice/order/job/reference number for that specific line, if present; otherwise null.
 Also set grand_total to the stated total at the bottom of the document if one is written, otherwise null. In this case the top-level supplier/amount/association_id/category fields can be left null (they are not used for ledgers).
 
 Associations:
@@ -202,7 +211,7 @@ ${list || "(none)"}
 Categories:
 ${catList || "(none — return null)"}
 
-Return ONLY a single JSON object with exactly these keys: document_type, supplier, expense_date, amount, currency, category, association_id, reasoning, line_items, grand_total. Use null for any field that doesn't apply. Do not wrap the JSON in markdown.`;
+Return ONLY a single JSON object with exactly these keys: document_type, supplier, expense_date, amount, currency, category, association_id, reference_number, reasoning, line_items, grand_total. Use null for any field that doesn't apply. Do not wrap the JSON in markdown.`;
 
   return { systemPrompt, userPrompt };
 }

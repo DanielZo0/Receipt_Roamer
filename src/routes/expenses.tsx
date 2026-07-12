@@ -44,6 +44,7 @@ type ExpenseRow = {
   amount: number | null;
   currency: string | null;
   category: string | null;
+  reference_number: string | null;
   file_path: string | null;
   file_mime: string | null;
   created_at: string;
@@ -126,7 +127,7 @@ function ExpensesPage() {
       if (from && (!e.expense_date || e.expense_date < from)) return false;
       if (to && (!e.expense_date || e.expense_date > to)) return false;
       if (q) {
-        const s = `${e.supplier ?? ""} ${e.category ?? ""}`.toLowerCase();
+        const s = `${e.supplier ?? ""} ${e.category ?? ""} ${e.reference_number ?? ""}`.toLowerCase();
         if (!s.includes(q)) return false;
       }
       return true;
@@ -253,13 +254,14 @@ function ExpensesPage() {
   });
 
   function exportCsv() {
-    const headers = ["Date", "Supplier", "Amount", "Currency", "Category", "Association"];
+    const headers = ["Date", "Supplier", "Amount", "Currency", "Category", "Reference", "Association"];
     const rows = filtered.map((e) => [
       e.expense_date ?? "",
       e.supplier ?? "",
       e.amount?.toString() ?? "",
       e.currency ?? "",
       e.category ?? "",
+      e.reference_number ?? "",
       assocName(e.association_id),
     ]);
     const csv = [headers, ...rows]
@@ -298,7 +300,7 @@ function ExpensesPage() {
         </div>
 
         <Card className="p-4 mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Input placeholder="Search supplier / category" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input placeholder="Search supplier / category / reference" value={search} onChange={(e) => setSearch(e.target.value)} />
           <Select value={assocFilter} onValueChange={setAssocFilter}>
             <SelectTrigger>
               <SelectValue placeholder="Association" />
@@ -325,6 +327,7 @@ function ExpensesPage() {
                 <TableHead>Supplier</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Category</TableHead>
+                <TableHead>Reference</TableHead>
                 <TableHead>Association</TableHead>
                 <TableHead>File</TableHead>
                 <TableHead>Details</TableHead>
@@ -334,13 +337,13 @@ function ExpensesPage() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                     Loading…
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                     No expenses match.
                   </TableCell>
                 </TableRow>
@@ -399,6 +402,17 @@ function ExpensesPage() {
                           update.mutate({ id: e.id, category: ev.target.value || null })
                         }
                         className="min-w-28"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        defaultValue={e.reference_number ?? ""}
+                        onBlur={(ev) =>
+                          ev.target.value !== (e.reference_number ?? "") &&
+                          update.mutate({ id: e.id, reference_number: ev.target.value || null })
+                        }
+                        className="min-w-28"
+                        placeholder="Invoice #"
                       />
                     </TableCell>
                     <TableCell>

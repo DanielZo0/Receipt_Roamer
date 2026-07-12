@@ -34,7 +34,7 @@ ${JSON.stringify(original, null, 2)}
 The following fields have problems:
 ${issues.join("\n")}
 
-Re-examine the attached document and return a corrected JSON object with exactly these keys: supplier, expense_date, amount, currency, category, association_id, reasoning. Use null for any field you genuinely cannot determine. Do not wrap the JSON in markdown.`;
+Re-examine the attached document and return a corrected JSON object with exactly these keys: supplier, expense_date, amount, currency, category, association_id, reference_number, reasoning. Use null for any field you genuinely cannot determine. Do not wrap the JSON in markdown.`;
 
   return callGeminiForExtraction({ apiKey, systemPrompt, userPrompt, file });
 }

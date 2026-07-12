@@ -75,6 +75,7 @@ export type Database = {
           id: string
           ledger_group_id: string | null
           raw_extraction: Json | null
+          reference_number: string | null
           source_line_index: number | null
           supplier: string | null
         }
@@ -90,6 +91,7 @@ export type Database = {
           id?: string
           ledger_group_id?: string | null
           raw_extraction?: Json | null
+          reference_number?: string | null
           source_line_index?: number | null
           supplier?: string | null
         }
@@ -105,6 +107,7 @@ export type Database = {
           id?: string
           ledger_group_id?: string | null
           raw_extraction?: Json | null
+          reference_number?: string | null
           source_line_index?: number | null
           supplier?: string | null
         }
@@ -179,6 +182,7 @@ export type Database = {
           extracted_currency: string | null
           extracted_category: string | null
           extracted_association_id: string | null
+          extracted_reference_number: string | null
           phase: string
           validation_errors: Json | null
           validation_warnings: Json | null
@@ -203,6 +207,7 @@ export type Database = {
           extracted_currency?: string | null
           extracted_category?: string | null
           extracted_association_id?: string | null
+          extracted_reference_number?: string | null
           phase: string
           validation_errors?: Json | null
           validation_warnings?: Json | null
@@ -227,6 +232,7 @@ export type Database = {
           extracted_currency?: string | null
           extracted_category?: string | null
           extracted_association_id?: string | null
+          extracted_reference_number?: string | null
           phase?: string
           validation_errors?: Json | null
           validation_warnings?: Json | null
