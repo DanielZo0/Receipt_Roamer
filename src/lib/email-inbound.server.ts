@@ -69,6 +69,7 @@ async function extractAndSaveAttachment(
   fileName: string,
   mimeType: string,
   fileBuffer: Buffer,
+  emailSubject: string | null,
 ) {
   const fileSize = fileBuffer.byteLength;
   const fileBase64 = fileBuffer.toString("base64");
@@ -89,6 +90,7 @@ async function extractAndSaveAttachment(
         fileBase64,
         filePath: storagePath,
         fileSize,
+        emailSubject,
       },
     );
 
@@ -162,6 +164,10 @@ export async function handleMailgunWebhook(request: Request): Promise<Response> 
     return new Response("OK", { status: 200 });
   }
 
+  // 2b. Grab the subject line — used as a fallback for association matching
+  // when the receipt image itself doesn't name the condominium.
+  const subject = (form.get("subject") as string | null)?.trim() || null;
+
   // 3. Collect attachment files from the form (Mailgun names them attachment-1, attachment-2, …)
   const attachments: { name: string; mime: string; buffer: Buffer }[] = [];
 
@@ -197,7 +203,7 @@ export async function handleMailgunWebhook(request: Request): Promise<Response> 
   const supabase = getSupabase();
   Promise.all(
     attachments.map((att) =>
-      extractAndSaveAttachment(supabase, att.name, att.mime, att.buffer).catch((err) =>
+      extractAndSaveAttachment(supabase, att.name, att.mime, att.buffer, subject).catch((err) =>
         console.error(`[email-inbound] Failed to process "${att.name}":`, err),
       ),
     ),

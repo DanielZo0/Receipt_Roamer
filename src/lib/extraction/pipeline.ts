@@ -5,6 +5,7 @@ import { validateExtractedFields, shouldTriggerLLMRecheck, type ValidationError 
 import {
   shouldLLMRecheckAssociation,
   matchAssociationWithLearnedRules,
+  matchAssociation,
   type AssociationRow,
 } from "./association-matching";
 import { type AssociationRuleRow } from "./learned-rules";
@@ -19,6 +20,10 @@ export interface RunExtractionPipelineParams {
   fileBase64: string;
   filePath: string;
   fileSize?: number | null;
+  /** Email subject line (when ingested via the Mailgun webhook) — used as a
+   *  fallback to identify the condominium when the receipt image itself
+   *  doesn't name it. */
+  emailSubject?: string | null;
 }
 
 export interface RunExtractionPipelineResult {
@@ -128,7 +133,17 @@ export async function runExtractionPipeline(
       ? extracted.association_id
       : null;
   // Prefer the rule-based match when it's confident; otherwise fall back to the LLM's pick.
-  const finalAssociationId = ruleMatch.association_id ?? llmAssocId;
+  let finalAssociationId = ruleMatch.association_id ?? llmAssocId;
+
+  // Fallback: if the receipt image gave no confident association match, try
+  // matching the email subject line (often names the condominium directly).
+  if (!finalAssociationId && params.emailSubject) {
+    const subjectMatch = matchAssociation({ supplier: params.emailSubject }, associations);
+    if (subjectMatch.association_id) {
+      finalAssociationId = subjectMatch.association_id;
+      ruleMatch = subjectMatch;
+    }
+  }
 
   // Normalise category to one of the known names (case-insensitive)
   const catNames = categories.map((c) => c.name);
@@ -230,13 +245,23 @@ async function runLedgerBranch(
     const expenseDate = lineItem.expense_date ?? extracted.expense_date;
     const currency = lineItem.currency ?? extracted.currency;
 
-    const { associationMatch, category: matchedCategory } = matchLineItem(
+    const { associationMatch: matchedAssociationMatch, category: matchedCategory } = matchLineItem(
       lineItem.supplier,
       associations,
       learnedRules,
       learnedCategoryRules,
       null,
     );
+    let associationMatch = matchedAssociationMatch;
+
+    // Fallback: if this line item's image content gave no confident
+    // association match, try the email subject line.
+    if (!associationMatch.association_id && params.emailSubject) {
+      const subjectMatch = matchAssociation({ supplier: params.emailSubject }, associations);
+      if (subjectMatch.association_id) {
+        associationMatch = subjectMatch;
+      }
+    }
 
     let category = matchedCategory;
     if (category && catNames.length) {
