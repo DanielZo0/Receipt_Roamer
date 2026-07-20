@@ -25,7 +25,11 @@ export const Route = createFileRoute("/upload-logs")({
   head: () => ({
     meta: [
       { title: "Upload logs · Receipt Tracker" },
-      { name: "description", content: "History of all receipt upload attempts, including AI extraction status and estimated Gemini API cost." },
+      {
+        name: "description",
+        content:
+          "History of all receipt upload attempts, including AI extraction status and estimated Gemini API cost.",
+      },
     ],
   }),
   component: UploadLogsPage,
@@ -43,12 +47,20 @@ type LogRow = {
   output_tokens: number | null;
   estimated_cost_usd: number | null;
   source: "upload" | "email" | null;
+  pipeline: "expense" | "income" | null;
+  income_payment_id: string | null;
   created_at: string;
   expenses?: {
     supplier: string | null;
     amount: number | null;
     currency: string | null;
     expense_date: string | null;
+  } | null;
+  income_payments?: {
+    payer_name: string | null;
+    amount: number | null;
+    currency: string | null;
+    payment_date: string | null;
   } | null;
 };
 
@@ -82,7 +94,17 @@ function FileTypeIcon({ mime }: { mime: string | null }) {
   return <FileText className="h-4 w-4 text-muted-foreground" />;
 }
 
-function StatCard({ icon: Icon, label, value, sub }: { icon: React.ElementType; label: string; value: string; sub?: string }) {
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  sub,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  sub?: string;
+}) {
   return (
     <Card className="p-4 flex items-start gap-3">
       <div className="rounded-md bg-primary/10 p-2">
@@ -107,11 +129,14 @@ function UploadLogsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("upload_logs")
-        .select(`
+        .select(
+          `
           id, file_name, file_size, file_mime, status, expense_id,
-          error_message, input_tokens, output_tokens, estimated_cost_usd, source, created_at,
-          expenses ( supplier, amount, currency, expense_date )
-        `)
+          error_message, input_tokens, output_tokens, estimated_cost_usd, source, pipeline, income_payment_id, created_at,
+          expenses ( supplier, amount, currency, expense_date ),
+          income_payments ( payer_name, amount, currency, payment_date )
+        `,
+        )
         .order("created_at", { ascending: false })
         .limit(200);
       if (error) throw new Error(error.message);
@@ -175,10 +200,8 @@ function UploadLogsPage() {
   const failCount = logs?.filter((l) => l.status === "error").length ?? 0;
   const successRate = totalLogs > 0 ? Math.round((successCount / totalLogs) * 100) : 0;
   const totalCost = logs?.reduce((sum, l) => sum + (l.estimated_cost_usd ?? 0), 0) ?? 0;
-  const totalTokens = logs?.reduce(
-    (sum, l) => sum + (l.input_tokens ?? 0) + (l.output_tokens ?? 0),
-    0,
-  ) ?? 0;
+  const totalTokens =
+    logs?.reduce((sum, l) => sum + (l.input_tokens ?? 0) + (l.output_tokens ?? 0), 0) ?? 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -186,7 +209,8 @@ function UploadLogsPage() {
       <main className="max-w-4xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold mb-1">Upload logs</h1>
         <p className="text-sm text-muted-foreground mb-6">
-          Every upload attempt — successful extractions and failures — with token usage and estimated Gemini API cost.
+          Every upload attempt — successful extractions and failures — with token usage and
+          estimated Gemini API cost.
         </p>
 
         {/* Stats row */}
@@ -221,7 +245,9 @@ function UploadLogsPage() {
         ) : totalLogs === 0 ? (
           <Card className="p-12 text-center">
             <ReceiptText className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-            <p className="text-muted-foreground">No uploads yet. Head to the Upload page to get started.</p>
+            <p className="text-muted-foreground">
+              No uploads yet. Head to the Upload page to get started.
+            </p>
           </Card>
         ) : (
           <Card className="overflow-hidden">
@@ -231,10 +257,18 @@ function UploadLogsPage() {
                   <tr className="border-b bg-muted/50">
                     <th className="text-left font-medium text-muted-foreground px-4 py-3 w-6"></th>
                     <th className="text-left font-medium text-muted-foreground px-4 py-3">File</th>
-                    <th className="text-left font-medium text-muted-foreground px-4 py-3">Supplier / Error</th>
-                    <th className="text-left font-medium text-muted-foreground px-4 py-3">Amount</th>
-                    <th className="text-right font-medium text-muted-foreground px-4 py-3">Tokens</th>
-                    <th className="text-right font-medium text-muted-foreground px-4 py-3">Est. cost</th>
+                    <th className="text-left font-medium text-muted-foreground px-4 py-3">
+                      Supplier / Error
+                    </th>
+                    <th className="text-left font-medium text-muted-foreground px-4 py-3">
+                      Amount
+                    </th>
+                    <th className="text-right font-medium text-muted-foreground px-4 py-3">
+                      Tokens
+                    </th>
+                    <th className="text-right font-medium text-muted-foreground px-4 py-3">
+                      Est. cost
+                    </th>
                     <th className="text-right font-medium text-muted-foreground px-4 py-3">Date</th>
                     <th className="px-4 py-3 w-10"></th>
                   </tr>
@@ -260,10 +294,17 @@ function UploadLogsPage() {
                               {log.file_name}
                             </p>
                             <div className="flex items-center gap-1.5">
-                              <p className="text-xs text-muted-foreground">{formatBytes(log.file_size)}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatBytes(log.file_size)}
+                              </p>
                               {log.source === "email" && (
                                 <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
                                   <Mail className="h-2.5 w-2.5" /> Email
+                                </span>
+                              )}
+                              {log.pipeline === "income" && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 font-medium">
+                                  <DollarSign className="h-2.5 w-2.5" /> Income
                                 </span>
                               )}
                             </div>
@@ -275,9 +316,21 @@ function UploadLogsPage() {
                       <td className="px-4 py-3">
                         {log.status === "success" ? (
                           <span className="truncate max-w-[160px] block">
-                            {log.expenses?.supplier ?? <span className="text-muted-foreground">Unknown</span>}
-                            {log.expenses?.expense_date && (
-                              <span className="block text-xs text-muted-foreground">{log.expenses.expense_date}</span>
+                            {log.pipeline === "income"
+                              ? (log.income_payments?.payer_name ?? (
+                                  <span className="text-muted-foreground">Unknown payer</span>
+                                ))
+                              : (log.expenses?.supplier ?? (
+                                  <span className="text-muted-foreground">Unknown</span>
+                                ))}
+                            {(log.pipeline === "income"
+                              ? log.income_payments?.payment_date
+                              : log.expenses?.expense_date) && (
+                              <span className="block text-xs text-muted-foreground">
+                                {log.pipeline === "income"
+                                  ? log.income_payments?.payment_date
+                                  : log.expenses?.expense_date}
+                              </span>
                             )}
                           </span>
                         ) : (
@@ -292,18 +345,31 @@ function UploadLogsPage() {
 
                       {/* Amount */}
                       <td className="px-4 py-3 font-mono">
-                        {log.status === "success"
-                          ? formatAmount(log.expenses?.amount ?? null, log.expenses?.currency ?? null)
-                          : <span className="text-muted-foreground">—</span>}
+                        {log.status === "success" ? (
+                          formatAmount(
+                            log.pipeline === "income"
+                              ? (log.income_payments?.amount ?? null)
+                              : (log.expenses?.amount ?? null),
+                            log.pipeline === "income"
+                              ? (log.income_payments?.currency ?? null)
+                              : (log.expenses?.currency ?? null),
+                          )
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </td>
 
                       {/* Tokens */}
                       <td className="px-4 py-3 text-right text-muted-foreground font-mono">
                         {log.input_tokens != null || log.output_tokens != null ? (
-                          <span title={`In: ${log.input_tokens ?? 0} · Out: ${log.output_tokens ?? 0}`}>
+                          <span
+                            title={`In: ${log.input_tokens ?? 0} · Out: ${log.output_tokens ?? 0}`}
+                          >
                             {((log.input_tokens ?? 0) + (log.output_tokens ?? 0)).toLocaleString()}
                           </span>
-                        ) : "—"}
+                        ) : (
+                          "—"
+                        )}
                       </td>
 
                       {/* Cost */}
@@ -328,7 +394,7 @@ function UploadLogsPage() {
 
                       {/* Retry */}
                       <td className="px-4 py-3">
-                        {log.status === "error" && (
+                        {log.status === "error" && log.pipeline !== "income" && (
                           <Button
                             variant="ghost"
                             size="icon"

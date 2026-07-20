@@ -45,6 +45,8 @@ export const expectedSchema: { table: string; columns: string[] }[] = [
       "output_tokens",
       "estimated_cost_usd",
       "source",
+      "pipeline",
+      "income_payment_id",
       "created_at",
     ],
   },
