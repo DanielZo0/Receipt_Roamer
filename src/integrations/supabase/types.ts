@@ -64,6 +64,7 @@ export type Database = {
           created_at: string;
           currency: string | null;
           expense_date: string | null;
+          exported_at: string | null;
           file_mime: string | null;
           file_path: string | null;
           id: string;
@@ -80,6 +81,7 @@ export type Database = {
           created_at?: string;
           currency?: string | null;
           expense_date?: string | null;
+          exported_at?: string | null;
           file_mime?: string | null;
           file_path?: string | null;
           id?: string;
@@ -96,6 +98,7 @@ export type Database = {
           created_at?: string;
           currency?: string | null;
           expense_date?: string | null;
+          exported_at?: string | null;
           file_mime?: string | null;
           file_path?: string | null;
           id?: string;
@@ -183,6 +186,7 @@ export type Database = {
           file_path: string | null;
           file_mime: string | null;
           raw_extraction: Json | null;
+          exported_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -199,6 +203,7 @@ export type Database = {
           file_path?: string | null;
           file_mime?: string | null;
           raw_extraction?: Json | null;
+          exported_at?: string | null;
           created_at?: string;
         };
         Update: {
@@ -215,6 +220,7 @@ export type Database = {
           file_path?: string | null;
           file_mime?: string | null;
           raw_extraction?: Json | null;
+          exported_at?: string | null;
           created_at?: string;
         };
         Relationships: [

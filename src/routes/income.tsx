@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -32,6 +32,7 @@ import {
   Copy,
   ChevronDown,
   ChevronUp,
+  Download,
 } from "lucide-react";
 
 export const Route = createFileRoute("/income")({
@@ -120,6 +121,7 @@ type PaymentRow = {
   match_confidence: number | null;
   match_signals: string[] | null;
   file_path: string | null;
+  exported_at: string | null;
   created_at: string;
 };
 
@@ -131,6 +133,7 @@ function IncomePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showUnmatchedOnly, setShowUnmatchedOnly] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [exportNewOnly, setExportNewOnly] = useState(true);
 
   const { data: owners } = useQuery({
     queryKey: ["owners"],
@@ -167,6 +170,12 @@ function IncomePage() {
   });
 
   const condoName = (id: string | null) => (id ? associations?.find((a) => a.id === id)?.name ?? "—" : "—");
+  const ownerName = (id: string | null) => (id ? owners?.find((o) => o.id === id)?.name ?? "—" : "—");
+
+  const filteredPayments = useMemo(
+    () => (payments ?? []).filter((p) => !showUnmatchedOnly || !p.owner_id),
+    [payments, showUnmatchedOnly],
+  );
 
   const update = useMutation({
     mutationFn: async (row: Partial<PaymentRow> & { id: string }) => {
@@ -196,6 +205,30 @@ function IncomePage() {
       qc.invalidateQueries({ queryKey: ["income_payments"] });
       setSelected(new Set());
       toast.success(`Assigned ${ids.length} payment${ids.length === 1 ? "" : "s"}`);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const markExported = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase
+        .from("income_payments")
+        .update({ exported_at: new Date().toISOString() })
+        .in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["income_payments"] }),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const resetExported = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase.from("income_payments").update({ exported_at: null }).in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: (_data, ids) => {
+      qc.invalidateQueries({ queryKey: ["income_payments"] });
+      toast.success(`Reset export status for ${ids.length} payment${ids.length === 1 ? "" : "s"}`);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -272,6 +305,38 @@ function IncomePage() {
     window.open(data.signedUrl, "_blank");
   }
 
+  function exportCsv() {
+    const toExport = exportNewOnly ? filteredPayments.filter((p) => !p.exported_at) : filteredPayments;
+    if (toExport.length === 0) {
+      toast.info("Nothing new to export");
+      return;
+    }
+    const headers = ["Date", "Payer", "Amount", "Currency", "Reference", "Condo", "Owner"];
+    const rows = toExport.map((p) => [
+      p.payment_date ?? "",
+      p.payer_name ?? "",
+      p.amount?.toString() ?? "",
+      p.currency ?? "",
+      p.reference_string ?? "",
+      condoName(p.condominium_id),
+      ownerName(p.owner_id),
+    ]);
+    const csv = [headers, ...rows]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `income-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    if (exportNewOnly) {
+      markExported.mutate(toExport.map((p) => p.id));
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <AppNav />
@@ -336,7 +401,7 @@ function IncomePage() {
         )}
 
         {(() => {
-          const filtered = (payments ?? []).filter((p) => !showUnmatchedOnly || !p.owner_id);
+          const filtered = filteredPayments;
           const allVisibleSelected = filtered.length > 0 && filtered.every((p) => selected.has(p.id));
 
           function toggleAll() {
@@ -377,6 +442,27 @@ function IncomePage() {
                   >
                     Unmatched ({payments?.filter((p) => !p.owner_id).length ?? 0})
                   </button>
+                </div>
+
+                <div className="flex items-center gap-3 flex-wrap">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Checkbox checked={exportNewOnly} onCheckedChange={(v) => setExportNewOnly(v === true)} />
+                    Only new (not yet exported)
+                  </label>
+                  {!exportNewOnly && filtered.some((p) => p.exported_at) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        resetExported.mutate(filtered.filter((p) => p.exported_at).map((p) => p.id))
+                      }
+                    >
+                      Reset export status
+                    </Button>
+                  )}
+                  <Button variant="outline" onClick={exportCsv} disabled={filtered.length === 0}>
+                    <Download className="h-4 w-4 mr-1" /> Export CSV
+                  </Button>
                 </div>
 
                 {selected.size > 0 && (

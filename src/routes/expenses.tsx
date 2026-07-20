@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AppNav } from "@/components/AppNav";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -47,6 +48,7 @@ type ExpenseRow = {
   reference_number: string | null;
   file_path: string | null;
   file_mime: string | null;
+  exported_at: string | null;
   created_at: string;
 };
 
@@ -118,6 +120,7 @@ function ExpensesPage() {
   const [assocFilter, setAssocFilter] = useState<string>("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [exportNewOnly, setExportNewOnly] = useState(true);
 
   const filtered = useMemo(() => {
     if (!expenses) return [];
@@ -253,9 +256,38 @@ function ExpensesPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const markExported = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase
+        .from("expenses")
+        .update({ exported_at: new Date().toISOString() })
+        .in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["expenses"] }),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const resetExported = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase.from("expenses").update({ exported_at: null }).in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: (_data, ids) => {
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      toast.success(`Reset export status for ${ids.length} expense${ids.length === 1 ? "" : "s"}`);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   function exportCsv() {
+    const toExport = exportNewOnly ? filtered.filter((e) => !e.exported_at) : filtered;
+    if (toExport.length === 0) {
+      toast.info("Nothing new to export");
+      return;
+    }
     const headers = ["Date", "Supplier", "Amount", "Currency", "Category", "Reference", "Association"];
-    const rows = filtered.map((e) => [
+    const rows = toExport.map((e) => [
       e.expense_date ?? "",
       e.supplier ?? "",
       e.amount?.toString() ?? "",
@@ -274,6 +306,10 @@ function ExpensesPage() {
     a.download = `expenses-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+
+    if (exportNewOnly) {
+      markExported.mutate(toExport.map((e) => e.id));
+    }
   }
 
   async function openFile(path: string | null) {
@@ -294,9 +330,24 @@ function ExpensesPage() {
       <main className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <h1 className="text-2xl font-bold">Expenses</h1>
-          <Button variant="outline" onClick={exportCsv} disabled={filtered.length === 0}>
-            <Download className="h-4 w-4 mr-1" /> Export CSV
-          </Button>
+          <div className="flex items-center gap-3 flex-wrap">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Checkbox checked={exportNewOnly} onCheckedChange={(v) => setExportNewOnly(v === true)} />
+              Only new (not yet exported)
+            </label>
+            {!exportNewOnly && filtered.some((e) => e.exported_at) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => resetExported.mutate(filtered.filter((e) => e.exported_at).map((e) => e.id))}
+              >
+                Reset export status
+              </Button>
+            )}
+            <Button variant="outline" onClick={exportCsv} disabled={filtered.length === 0}>
+              <Download className="h-4 w-4 mr-1" /> Export CSV
+            </Button>
+          </div>
         </div>
 
         <Card className="p-4 mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
