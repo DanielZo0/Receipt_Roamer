@@ -4,7 +4,7 @@ import { AppNav } from "@/components/AppNav";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, FileText } from "lucide-react";
+import { Upload, FileText, DollarSign } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -58,6 +58,34 @@ function Index() {
     },
   });
 
+  const { data: incomeTotals } = useQuery({
+    queryKey: ["income_totals"],
+    queryFn: async () => {
+      const [{ data: assocs }, { data: payments }] = await Promise.all([
+        supabase.from("associations").select("id,name").order("name"),
+        supabase.from("income_payments").select("condominium_id,owner_id,amount,currency"),
+      ]);
+      const byAssoc = new Map<string, Map<string, number>>();
+      let unmatchedCount = 0;
+      for (const p of payments ?? []) {
+        if (!p.owner_id) unmatchedCount++;
+        if (!p.condominium_id) continue;
+        const cur = p.currency ?? "—";
+        if (!byAssoc.has(p.condominium_id)) byAssoc.set(p.condominium_id, new Map());
+        byAssoc.get(p.condominium_id)!.set(
+          cur,
+          (byAssoc.get(p.condominium_id)!.get(cur) ?? 0) + Number(p.amount ?? 0),
+        );
+      }
+      return {
+        totalCount: payments?.length ?? 0,
+        unmatchedCount,
+        associations: assocs ?? [],
+        byAssoc,
+      };
+    },
+  });
+
   const fmt = (n: number, cur: string) =>
     new Intl.NumberFormat(undefined, {
       style: cur && cur !== "—" ? "currency" : "decimal",
@@ -80,6 +108,11 @@ function Index() {
             <Button asChild>
               <Link to="/upload">
                 <Upload className="h-4 w-4 mr-1" /> Upload receipt
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/income">
+                <DollarSign className="h-4 w-4 mr-1" /> Add income
               </Link>
             </Button>
             <Button variant="outline" asChild>
@@ -137,6 +170,49 @@ function Index() {
               })()}
             </Card>
           ) : null}
+        </div>
+
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Income per association
+          </h2>
+          {incomeTotals?.unmatchedCount ? (
+            <Link
+              to="/income"
+              className="text-xs font-medium px-2 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors"
+            >
+              {incomeTotals.unmatchedCount} unmatched payment{incomeTotals.unmatchedCount === 1 ? "" : "s"} →
+            </Link>
+          ) : null}
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
+          {!incomeTotals || incomeTotals.totalCount === 0 ? (
+            <Card className="p-6 col-span-full text-center">
+              <p className="text-muted-foreground mb-3">No income payments yet.</p>
+              <Button asChild variant="outline">
+                <Link to="/income">
+                  <DollarSign className="h-4 w-4 mr-1" /> Upload a payment
+                </Link>
+              </Button>
+            </Card>
+          ) : (
+            incomeTotals.associations.map((a) => {
+              const sums = incomeTotals.byAssoc.get(a.id);
+              if (!sums || sums.size === 0) return null;
+              return (
+                <Card key={a.id} className="p-4">
+                  <h3 className="font-semibold mb-1 truncate">{a.name}</h3>
+                  <ul className="text-sm space-y-0.5">
+                    {Array.from(sums.entries()).map(([cur, sum]) => (
+                      <li key={cur} className="text-foreground">
+                        {fmt(sum, cur)}
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              );
+            })
+          )}
         </div>
 
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">

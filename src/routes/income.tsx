@@ -5,13 +5,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -20,7 +13,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AppNav } from "@/components/AppNav";
+import { OwnerCombobox, type OwnerLite, type AssociationLite } from "@/components/OwnerCombobox";
 import { supabase } from "@/integrations/supabase/client";
 import { extractAndSaveIncomePayment } from "@/lib/income.functions";
 import { toast } from "sonner";
@@ -113,7 +108,6 @@ function StatusChip({ status, error }: { status: FileStatus; error?: string }) {
   );
 }
 
-type OwnerLite = { id: string; name: string; apartment: string | null; condominium_id: string | null };
 type PaymentRow = {
   id: string;
   owner_id: string | null;
@@ -135,6 +129,8 @@ function IncomePage() {
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showUnmatchedOnly, setShowUnmatchedOnly] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const { data: owners } = useQuery({
     queryKey: ["owners"],
@@ -170,7 +166,6 @@ function IncomePage() {
     },
   });
 
-  const ownerName = (id: string | null) => (id ? owners?.find((o) => o.id === id)?.name ?? "—" : "—");
   const condoName = (id: string | null) => (id ? associations?.find((a) => a.id === id)?.name ?? "—" : "—");
 
   const update = useMutation({
@@ -184,6 +179,24 @@ function IncomePage() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["income_payments"] }),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const bulkAssign = useMutation({
+    mutationFn: async ({ ids, ownerId }: { ids: string[]; ownerId: string | null }) => {
+      const owner = ownerId ? owners?.find((o) => o.id === ownerId) : undefined;
+      const condominium_id = ownerId ? owner?.condominium_id ?? null : null;
+      const { error } = await supabase
+        .from("income_payments")
+        .update({ owner_id: ownerId, condominium_id })
+        .in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: (_data, { ids }) => {
+      qc.invalidateQueries({ queryKey: ["income_payments"] });
+      setSelected(new Set());
+      toast.success(`Assigned ${ids.length} payment${ids.length === 1 ? "" : "s"}`);
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -322,87 +335,159 @@ function IncomePage() {
           </Card>
         )}
 
-        <Card className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Payer</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Reference</TableHead>
-                <TableHead>Condo</TableHead>
-                <TableHead>Owner</TableHead>
-                <TableHead>Match</TableHead>
-                <TableHead>File</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                    Loading…
-                  </TableCell>
-                </TableRow>
-              ) : !payments || payments.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                    No income payments yet.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                payments.map((p) => (
-                  <TableRow key={p.id} className={!p.owner_id ? "bg-amber-500/5" : undefined}>
-                    <TableCell className="whitespace-nowrap">{p.payment_date ?? "—"}</TableCell>
-                    <TableCell>{p.payer_name ?? "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {p.amount != null ? `${p.amount.toFixed(2)} ${p.currency ?? ""}` : "—"}
-                    </TableCell>
-                    <TableCell className="max-w-48 truncate" title={p.reference_string ?? ""}>
-                      {p.reference_string ?? "—"}
-                    </TableCell>
-                    <TableCell>{condoName(p.condominium_id)}</TableCell>
-                    <TableCell>
-                      <Select
-                        value={p.owner_id ?? "none"}
-                        onValueChange={(v) => update.mutate({ id: p.id, owner_id: v === "none" ? null : v })}
-                      >
-                        <SelectTrigger className="min-w-44">
-                          <SelectValue>{ownerName(p.owner_id)}</SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">— unassigned —</SelectItem>
-                          {owners?.map((o) => (
-                            <SelectItem key={o.id} value={o.id}>
-                              {o.name}{o.apartment ? ` (Flt ${o.apartment})` : ""}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      {p.match_confidence != null ? (
-                        <Badge variant={p.owner_id ? "outline" : "destructive"}>
-                          {(p.match_confidence * 100).toFixed(0)}%
-                        </Badge>
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {p.file_path ? (
-                        <Button size="icon" variant="ghost" onClick={() => openFile(p.file_path)}>
-                          <ExternalLink className="h-4 w-4" />
-                        </Button>
-                      ) : (
-                        <FileText className="h-4 w-4 text-muted-foreground" />
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </Card>
+        {(() => {
+          const filtered = (payments ?? []).filter((p) => !showUnmatchedOnly || !p.owner_id);
+          const allVisibleSelected = filtered.length > 0 && filtered.every((p) => selected.has(p.id));
+
+          function toggleAll() {
+            setSelected((prev) => {
+              if (allVisibleSelected) return new Set();
+              return new Set(filtered.map((p) => p.id));
+            });
+          }
+
+          function toggleRow(id: string) {
+            setSelected((prev) => {
+              const next = new Set(prev);
+              if (next.has(id)) next.delete(id);
+              else next.add(id);
+              return next;
+            });
+          }
+
+          return (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <div className="inline-flex rounded-md border p-0.5 bg-muted/40">
+                  <button
+                    type="button"
+                    onClick={() => setShowUnmatchedOnly(false)}
+                    className={`px-3 py-1 rounded-sm text-sm font-medium transition-colors ${
+                      !showUnmatchedOnly ? "bg-background shadow-sm" : "text-muted-foreground"
+                    }`}
+                  >
+                    All ({payments?.length ?? 0})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowUnmatchedOnly(true)}
+                    className={`px-3 py-1 rounded-sm text-sm font-medium transition-colors ${
+                      showUnmatchedOnly ? "bg-background shadow-sm" : "text-muted-foreground"
+                    }`}
+                  >
+                    Unmatched ({payments?.filter((p) => !p.owner_id).length ?? 0})
+                  </button>
+                </div>
+
+                {selected.size > 0 && (
+                  <div className="flex items-center gap-2 bg-accent/60 border rounded-md px-3 py-1.5">
+                    <span className="text-sm font-medium">
+                      {selected.size} selected
+                    </span>
+                    <OwnerCombobox
+                      owners={(owners ?? []) as OwnerLite[]}
+                      associations={(associations ?? []) as AssociationLite[]}
+                      value={null}
+                      onChange={(ownerId) => bulkAssign.mutate({ ids: Array.from(selected), ownerId })}
+                      placeholder="Assign to…"
+                      className="min-w-56"
+                    />
+                    <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+                      Clear
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <Card className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={allVisibleSelected}
+                          onCheckedChange={toggleAll}
+                          aria-label="Select all"
+                        />
+                      </TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Payer</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Reference</TableHead>
+                      <TableHead>Condo</TableHead>
+                      <TableHead>Owner</TableHead>
+                      <TableHead>Match</TableHead>
+                      <TableHead>File</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                          Loading…
+                        </TableCell>
+                      </TableRow>
+                    ) : filtered.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                          {showUnmatchedOnly ? "No unmatched payments." : "No income payments yet."}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filtered.map((p) => (
+                        <TableRow key={p.id} className={!p.owner_id ? "bg-amber-500/5" : undefined}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selected.has(p.id)}
+                              onCheckedChange={() => toggleRow(p.id)}
+                              aria-label={`Select payment from ${p.payer_name ?? "unknown"}`}
+                            />
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">{p.payment_date ?? "—"}</TableCell>
+                          <TableCell>{p.payer_name ?? "—"}</TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {p.amount != null ? `${p.amount.toFixed(2)} ${p.currency ?? ""}` : "—"}
+                          </TableCell>
+                          <TableCell className="max-w-48 truncate" title={p.reference_string ?? ""}>
+                            {p.reference_string ?? "—"}
+                          </TableCell>
+                          <TableCell>{condoName(p.condominium_id)}</TableCell>
+                          <TableCell>
+                            <OwnerCombobox
+                              owners={(owners ?? []) as OwnerLite[]}
+                              associations={(associations ?? []) as AssociationLite[]}
+                              value={p.owner_id}
+                              onChange={(ownerId) => update.mutate({ id: p.id, owner_id: ownerId })}
+                              preferredCondominiumId={p.condominium_id}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {p.match_confidence != null ? (
+                              <Badge variant={p.owner_id ? "outline" : "destructive"}>
+                                {(p.match_confidence * 100).toFixed(0)}%
+                              </Badge>
+                            ) : (
+                              "—"
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {p.file_path ? (
+                              <Button size="icon" variant="ghost" onClick={() => openFile(p.file_path)}>
+                                <ExternalLink className="h-4 w-4" />
+                              </Button>
+                            ) : (
+                              <FileText className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </Card>
+            </>
+          );
+        })()}
       </main>
     </div>
   );
