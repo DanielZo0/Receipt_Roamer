@@ -45,6 +45,17 @@ export const Route = createFileRoute("/income")({
   component: IncomePage,
 });
 
+function formatDateForFilename(d: Date): string {
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${dd}-${mm}-${d.getFullYear()}`;
+}
+
+function formatIsoDateDmy(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return y && m && d ? `${d}-${m}-${y}` : iso;
+}
+
 type FileStatus = "queued" | "uploading" | "extracting" | "done" | "error";
 
 interface QueuedFile {
@@ -313,7 +324,7 @@ function IncomePage() {
     }
     const headers = ["Date", "Payer", "Amount", "Currency", "Reference", "Condo", "Owner"];
     const rows = toExport.map((p) => [
-      p.payment_date ?? "",
+      p.payment_date ? formatIsoDateDmy(p.payment_date) : "",
       p.payer_name ?? "",
       p.amount?.toString() ?? "",
       p.currency ?? "",
@@ -328,7 +339,7 @@ function IncomePage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `income-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `income-${formatDateForFilename(new Date())}.csv`;
     a.click();
     URL.revokeObjectURL(url);
 

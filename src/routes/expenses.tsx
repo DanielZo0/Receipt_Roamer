@@ -37,6 +37,17 @@ export const Route = createFileRoute("/expenses")({
   component: ExpensesPage,
 });
 
+function formatDateForFilename(d: Date): string {
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${dd}-${mm}-${d.getFullYear()}`;
+}
+
+function formatIsoDateDmy(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return y && m && d ? `${d}-${m}-${y}` : iso;
+}
+
 type ExpenseRow = {
   id: string;
   association_id: string | null;
@@ -288,7 +299,7 @@ function ExpensesPage() {
     }
     const headers = ["Date", "Supplier", "Amount", "Currency", "Category", "Reference", "Association"];
     const rows = toExport.map((e) => [
-      e.expense_date ?? "",
+      e.expense_date ? formatIsoDateDmy(e.expense_date) : "",
       e.supplier ?? "",
       e.amount?.toString() ?? "",
       e.currency ?? "",
@@ -303,7 +314,7 @@ function ExpensesPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `expenses-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `expenses-${formatDateForFilename(new Date())}.csv`;
     a.click();
     URL.revokeObjectURL(url);
 
