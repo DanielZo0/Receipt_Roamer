@@ -32,11 +32,9 @@ const ALLOWED_MIME = new Set([
 // ── Supabase client (server-side only) ──────────────────────────────────────
 
 function getSupabase() {
-  return createClient<Database>(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_PUBLISHABLE_KEY!,
-    { auth: { storage: undefined, persistSession: false, autoRefreshToken: false } },
-  );
+  return createClient<Database>(process.env.SUPABASE_URL!, process.env.SUPABASE_PUBLISHABLE_KEY!, {
+    auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+  });
 }
 
 // ── Mailgun HMAC verification ────────────────────────────────────────────────
@@ -63,7 +61,10 @@ function verifyMailgunSignature(
 // ── Shared extraction pipelines (src/lib/extraction/) ────────────────────────
 
 import { runExtractionPipeline } from "@/lib/extraction/pipeline";
-import { runIncomeExtractionPipeline } from "@/lib/extraction/income-pipeline";
+import {
+  runIncomeExtractionPipeline,
+  runIncomeExtractionPipelineFromText,
+} from "@/lib/extraction/income-pipeline";
 
 /** Subject line convention to route an inbound email to the income pipeline
  *  instead of the default expense pipeline — e.g. "Income: owner payment". */
@@ -146,15 +147,90 @@ async function extractAndSaveIncomeAttachment(
   if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
 
   try {
-    const { payment } = await runIncomeExtractionPipeline(supabase, {
-      fileName,
-      fileMime: mimeType,
-      fileBase64,
-      filePath: storagePath,
-    });
+    const { payment, inputTokens, outputTokens, estimatedCostUsd } =
+      await runIncomeExtractionPipeline(supabase, {
+        fileName,
+        fileMime: mimeType,
+        fileBase64,
+        filePath: storagePath,
+      });
+
+    await supabase.from("upload_logs").insert({
+      file_name: fileName,
+      file_size: fileSize,
+      file_mime: mimeType,
+      status: "success",
+      pipeline: "income",
+      income_payment_id: payment.id,
+      error_message: null,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      estimated_cost_usd: estimatedCostUsd,
+      source: "email",
+    } as never);
+
     console.log(`[email-inbound] Saved income payment ${payment.id} from attachment "${fileName}"`);
   } catch (e) {
     console.error("[email-inbound] Income extraction failed", e);
+    await supabase.from("upload_logs").insert({
+      file_name: fileName,
+      file_size: fileSize,
+      file_mime: mimeType,
+      status: "error",
+      pipeline: "income",
+      income_payment_id: null,
+      error_message: (e as Error).message ?? "Unknown error",
+      input_tokens: null,
+      output_tokens: null,
+      estimated_cost_usd: null,
+      source: "email",
+    } as never);
+  }
+}
+
+/** Handles an "income"/"payment" email that has no usable attachment, by
+ *  reading the payment details straight out of the forwarded email's plain
+ *  text body (e.g. a forwarded Wise "Money received" notification). */
+async function extractAndSaveIncomeFromText(
+  supabase: ReturnType<typeof getSupabase>,
+  subject: string | null,
+  emailBodyText: string,
+) {
+  const logName = subject ?? "(no subject)";
+  try {
+    const { payment, inputTokens, outputTokens, estimatedCostUsd } =
+      await runIncomeExtractionPipelineFromText(supabase, { emailBodyText });
+
+    await supabase.from("upload_logs").insert({
+      file_name: logName,
+      file_size: emailBodyText.length,
+      file_mime: "text/plain",
+      status: "success",
+      pipeline: "income",
+      income_payment_id: payment.id,
+      error_message: null,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      estimated_cost_usd: estimatedCostUsd,
+      source: "email",
+    } as never);
+
+    console.log(`[email-inbound] Saved income payment ${payment.id} from email body text`);
+  } catch (e) {
+    console.error("[email-inbound] Income text extraction failed", e);
+    await supabase.from("upload_logs").insert({
+      file_name: logName,
+      file_size: emailBodyText.length,
+      file_mime: "text/plain",
+      status: "error",
+      pipeline: "income",
+      income_payment_id: null,
+      error_message: (e as Error).message ?? "Unknown error",
+      input_tokens: null,
+      output_tokens: null,
+      estimated_cost_usd: null,
+      source: "email",
+    } as never);
   }
 }
 
@@ -198,8 +274,10 @@ export async function handleMailgunWebhook(request: Request): Promise<Response> 
   }
 
   // 2b. Grab the subject line — used as a fallback for association matching
-  // when the receipt image itself doesn't name the condominium.
+  // when the receipt image itself doesn't name the condominium, and to route
+  // to the income pipeline when it mentions "income"/"payment".
   const subject = (form.get("subject") as string | null)?.trim() || null;
+  const isIncome = !!subject && INCOME_SUBJECT_RE.test(subject);
 
   // 3. Collect attachment files from the form (Mailgun names them attachment-1, attachment-2, …)
   const attachments: { name: string; mime: string; buffer: Buffer }[] = [];
@@ -210,12 +288,16 @@ export async function handleMailgunWebhook(request: Request): Promise<Response> 
 
     const mime = value.type || "application/octet-stream";
     if (!ALLOWED_MIME.has(mime)) {
-      console.log(`[email-inbound] Skipping attachment "${value.name}" with unsupported MIME: ${mime}`);
+      console.log(
+        `[email-inbound] Skipping attachment "${value.name}" with unsupported MIME: ${mime}`,
+      );
       continue;
     }
 
     if (value.size > MAX_BYTES) {
-      console.log(`[email-inbound] Skipping attachment "${value.name}" — too large (${value.size} bytes)`);
+      console.log(
+        `[email-inbound] Skipping attachment "${value.name}" — too large (${value.size} bytes)`,
+      );
       continue;
     }
 
@@ -227,8 +309,39 @@ export async function handleMailgunWebhook(request: Request): Promise<Response> 
     });
   }
 
+  const supabase = getSupabase();
+
   if (attachments.length === 0) {
+    // No attachment — for income emails, fall back to reading the payment
+    // details straight out of the forwarded email's plain-text body (e.g. a
+    // forwarded Wise "Money received" notification with no screenshot).
+    const bodyText =
+      (
+        (form.get("stripped-text") as string | null) || (form.get("body-plain") as string | null)
+      )?.trim() || null;
+
+    if (isIncome && bodyText) {
+      console.log("[email-inbound] No attachment — extracting income payment from email body text");
+      await extractAndSaveIncomeFromText(supabase, subject, bodyText);
+      return new Response("OK", { status: 200 });
+    }
+
     console.log("[email-inbound] Email had no processable attachments");
+    await supabase.from("upload_logs").insert({
+      file_name: subject ?? "(no subject)",
+      file_size: null,
+      file_mime: null,
+      status: "error",
+      pipeline: isIncome ? "income" : "expense",
+      income_payment_id: null,
+      error_message: isIncome
+        ? "Income email had no attachment and no readable body text to extract payment details from."
+        : "Email had no processable attachment — a screenshot or PDF of the receipt/payment must be attached.",
+      input_tokens: null,
+      output_tokens: null,
+      estimated_cost_usd: null,
+      source: "email",
+    } as never);
     return new Response("OK — no processable attachments", { status: 200 });
   }
 
@@ -236,8 +349,6 @@ export async function handleMailgunWebhook(request: Request): Promise<Response> 
   // Subject line decides which pipeline: "income"/"payment" in the subject
   // routes to the income pipeline, everything else stays on expenses (the
   // existing default behavior is unchanged).
-  const isIncome = !!subject && INCOME_SUBJECT_RE.test(subject);
-  const supabase = getSupabase();
   Promise.all(
     attachments.map((att) =>
       (isIncome
