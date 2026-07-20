@@ -121,6 +121,125 @@ export type Database = {
           },
         ]
       }
+      owners: {
+        Row: {
+          id: string
+          condominium_id: string | null
+          name: string
+          apartment: string | null
+          email: string | null
+          phone: string | null
+          id_number: string | null
+          yearly_contribution: number | null
+          contribution_paid: boolean
+          notes: string | null
+          vat_number: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          condominium_id?: string | null
+          name: string
+          apartment?: string | null
+          email?: string | null
+          phone?: string | null
+          id_number?: string | null
+          yearly_contribution?: number | null
+          contribution_paid?: boolean
+          notes?: string | null
+          vat_number?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          condominium_id?: string | null
+          name?: string
+          apartment?: string | null
+          email?: string | null
+          phone?: string | null
+          id_number?: string | null
+          yearly_contribution?: number | null
+          contribution_paid?: boolean
+          notes?: string | null
+          vat_number?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "owners_condominium_id_fkey"
+            columns: ["condominium_id"]
+            isOneToOne: false
+            referencedRelation: "associations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      income_payments: {
+        Row: {
+          id: string
+          owner_id: string | null
+          condominium_id: string | null
+          payer_name: string | null
+          amount: number | null
+          currency: string | null
+          payment_date: string | null
+          reference_string: string | null
+          match_confidence: number | null
+          match_signals: string[] | null
+          file_path: string | null
+          file_mime: string | null
+          raw_extraction: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          owner_id?: string | null
+          condominium_id?: string | null
+          payer_name?: string | null
+          amount?: number | null
+          currency?: string | null
+          payment_date?: string | null
+          reference_string?: string | null
+          match_confidence?: number | null
+          match_signals?: string[] | null
+          file_path?: string | null
+          file_mime?: string | null
+          raw_extraction?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          owner_id?: string | null
+          condominium_id?: string | null
+          payer_name?: string | null
+          amount?: number | null
+          currency?: string | null
+          payment_date?: string | null
+          reference_string?: string | null
+          match_confidence?: number | null
+          match_signals?: string[] | null
+          file_path?: string | null
+          file_mime?: string | null
+          raw_extraction?: Json | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "income_payments_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "owners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "income_payments_condominium_id_fkey"
+            columns: ["condominium_id"]
+            isOneToOne: false
+            referencedRelation: "associations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       upload_logs: {
         Row: {
           id: string

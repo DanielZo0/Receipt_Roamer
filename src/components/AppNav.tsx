@@ -1,5 +1,5 @@
 import { Link, useRouter } from "@tanstack/react-router";
-import { FileText, Home, Upload, Building2, Tag, ScrollText, LogOut, Sparkles, History, LineChart } from "lucide-react";
+import { FileText, Home, Upload, Building2, Tag, ScrollText, LogOut, Sparkles, History, LineChart, DollarSign } from "lucide-react";
 import { logoutFn } from "../lib/auth";
 import { toast } from "sonner";
 
@@ -41,6 +41,9 @@ export function AppNav() {
             </Link>
             <Link to="/expenses" className={linkBase} activeProps={activeProps}>
               <FileText className="h-4 w-4" /> Expenses
+            </Link>
+            <Link to="/income" className={linkBase} activeProps={activeProps}>
+              <DollarSign className="h-4 w-4" /> Income
             </Link>
             <Link to="/associations" className={linkBase} activeProps={activeProps}>
               <Building2 className="h-4 w-4" /> Associations

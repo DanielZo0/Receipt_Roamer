@@ -60,9 +60,14 @@ function verifyMailgunSignature(
   }
 }
 
-// ── Shared extraction pipeline (src/lib/extraction/) ─────────────────────────
+// ── Shared extraction pipelines (src/lib/extraction/) ────────────────────────
 
 import { runExtractionPipeline } from "@/lib/extraction/pipeline";
+import { runIncomeExtractionPipeline } from "@/lib/extraction/income-pipeline";
+
+/** Subject line convention to route an inbound email to the income pipeline
+ *  instead of the default expense pipeline — e.g. "Income: owner payment". */
+const INCOME_SUBJECT_RE = /\b(income|payment)\b/i;
 
 async function extractAndSaveAttachment(
   supabase: ReturnType<typeof getSupabase>,
@@ -122,6 +127,34 @@ async function extractAndSaveAttachment(
       estimated_cost_usd: null,
       source: "email",
     } as never);
+  }
+}
+
+async function extractAndSaveIncomeAttachment(
+  supabase: ReturnType<typeof getSupabase>,
+  fileName: string,
+  mimeType: string,
+  fileBuffer: Buffer,
+) {
+  const fileSize = fileBuffer.byteLength;
+  const fileBase64 = fileBuffer.toString("base64");
+
+  const storagePath = `${crypto.randomUUID()}-${fileName.replace(/[^\w.\-]/g, "_")}`;
+  const { error: upErr } = await supabase.storage
+    .from("receipts")
+    .upload(storagePath, fileBuffer, { contentType: mimeType, upsert: false });
+  if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
+
+  try {
+    const { payment } = await runIncomeExtractionPipeline(supabase, {
+      fileName,
+      fileMime: mimeType,
+      fileBase64,
+      filePath: storagePath,
+    });
+    console.log(`[email-inbound] Saved income payment ${payment.id} from attachment "${fileName}"`);
+  } catch (e) {
+    console.error("[email-inbound] Income extraction failed", e);
   }
 }
 
@@ -199,13 +232,18 @@ export async function handleMailgunWebhook(request: Request): Promise<Response> 
     return new Response("OK — no processable attachments", { status: 200 });
   }
 
-  // 4. Process attachments asynchronously (don't block the response)
+  // 4. Process attachments asynchronously (don't block the response).
+  // Subject line decides which pipeline: "income"/"payment" in the subject
+  // routes to the income pipeline, everything else stays on expenses (the
+  // existing default behavior is unchanged).
+  const isIncome = !!subject && INCOME_SUBJECT_RE.test(subject);
   const supabase = getSupabase();
   Promise.all(
     attachments.map((att) =>
-      extractAndSaveAttachment(supabase, att.name, att.mime, att.buffer, subject).catch((err) =>
-        console.error(`[email-inbound] Failed to process "${att.name}":`, err),
-      ),
+      (isIncome
+        ? extractAndSaveIncomeAttachment(supabase, att.name, att.mime, att.buffer)
+        : extractAndSaveAttachment(supabase, att.name, att.mime, att.buffer, subject)
+      ).catch((err) => console.error(`[email-inbound] Failed to process "${att.name}":`, err)),
     ),
   );
 

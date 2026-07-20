@@ -14,6 +14,7 @@ import { Route as UploadRouteImport } from './routes/upload'
 import { Route as RulesRouteImport } from './routes/rules'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as InsightsRouteImport } from './routes/insights'
+import { Route as IncomeRouteImport } from './routes/income'
 import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as CorrectionsRouteImport } from './routes/corrections'
 import { Route as CategoriesRouteImport } from './routes/categories'
@@ -43,6 +44,11 @@ const LoginRoute = LoginRouteImport.update({
 const InsightsRoute = InsightsRouteImport.update({
   id: '/insights',
   path: '/insights',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IncomeRoute = IncomeRouteImport.update({
+  id: '/income',
+  path: '/income',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExpensesRoute = ExpensesRouteImport.update({
@@ -77,6 +83,7 @@ export interface FileRoutesByFullPath {
   '/categories': typeof CategoriesRoute
   '/corrections': typeof CorrectionsRoute
   '/expenses': typeof ExpensesRoute
+  '/income': typeof IncomeRoute
   '/insights': typeof InsightsRoute
   '/login': typeof LoginRoute
   '/rules': typeof RulesRoute
@@ -89,6 +96,7 @@ export interface FileRoutesByTo {
   '/categories': typeof CategoriesRoute
   '/corrections': typeof CorrectionsRoute
   '/expenses': typeof ExpensesRoute
+  '/income': typeof IncomeRoute
   '/insights': typeof InsightsRoute
   '/login': typeof LoginRoute
   '/rules': typeof RulesRoute
@@ -102,6 +110,7 @@ export interface FileRoutesById {
   '/categories': typeof CategoriesRoute
   '/corrections': typeof CorrectionsRoute
   '/expenses': typeof ExpensesRoute
+  '/income': typeof IncomeRoute
   '/insights': typeof InsightsRoute
   '/login': typeof LoginRoute
   '/rules': typeof RulesRoute
@@ -116,6 +125,7 @@ export interface FileRouteTypes {
     | '/categories'
     | '/corrections'
     | '/expenses'
+    | '/income'
     | '/insights'
     | '/login'
     | '/rules'
@@ -128,6 +138,7 @@ export interface FileRouteTypes {
     | '/categories'
     | '/corrections'
     | '/expenses'
+    | '/income'
     | '/insights'
     | '/login'
     | '/rules'
@@ -140,6 +151,7 @@ export interface FileRouteTypes {
     | '/categories'
     | '/corrections'
     | '/expenses'
+    | '/income'
     | '/insights'
     | '/login'
     | '/rules'
@@ -153,6 +165,7 @@ export interface RootRouteChildren {
   CategoriesRoute: typeof CategoriesRoute
   CorrectionsRoute: typeof CorrectionsRoute
   ExpensesRoute: typeof ExpensesRoute
+  IncomeRoute: typeof IncomeRoute
   InsightsRoute: typeof InsightsRoute
   LoginRoute: typeof LoginRoute
   RulesRoute: typeof RulesRoute
@@ -195,6 +208,13 @@ declare module '@tanstack/react-router' {
       path: '/insights'
       fullPath: '/insights'
       preLoaderRoute: typeof InsightsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/income': {
+      id: '/income'
+      path: '/income'
+      fullPath: '/income'
+      preLoaderRoute: typeof IncomeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/expenses': {
@@ -241,6 +261,7 @@ const rootRouteChildren: RootRouteChildren = {
   CategoriesRoute: CategoriesRoute,
   CorrectionsRoute: CorrectionsRoute,
   ExpensesRoute: ExpensesRoute,
+  IncomeRoute: IncomeRoute,
   InsightsRoute: InsightsRoute,
   LoginRoute: LoginRoute,
   RulesRoute: RulesRoute,

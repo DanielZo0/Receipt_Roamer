@@ -35,4 +35,10 @@ export const RULES = {
   llm_recheck: {
     association_confidence_threshold: 0.7,
   },
+  owner_matching: {
+    condo_match: 0.9,
+    apartment_match: 1.0,
+    name_match_threshold: 0.5,
+    combined_threshold: 0.6,
+  },
 } as const;
