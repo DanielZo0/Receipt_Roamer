@@ -24,6 +24,10 @@ dist-ssr
 .env
 .env.local
 
+# Data exports — contain owner/association data, never commit
+condominiums_export.json
+owners_export.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
