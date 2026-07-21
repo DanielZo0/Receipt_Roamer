@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "db:check": "node scripts/check-schema.mjs"
+    "db:check": "node scripts/check-schema.mjs",
+    "sync:association-names": "node scripts/sync-association-names.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.51",
