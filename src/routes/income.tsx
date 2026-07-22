@@ -33,6 +33,7 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
+  Trash2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/income")({
@@ -240,6 +241,21 @@ function IncomePage() {
     onSuccess: (_data, ids) => {
       qc.invalidateQueries({ queryKey: ["income_payments"] });
       toast.success(`Reset export status for ${ids.length} payment${ids.length === 1 ? "" : "s"}`);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const del = useMutation({
+    mutationFn: async (row: PaymentRow) => {
+      if (row.file_path) {
+        await supabase.storage.from("receipts").remove([row.file_path]);
+      }
+      const { error } = await supabase.from("income_payments").delete().eq("id", row.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["income_payments"] });
+      toast.success("Deleted");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -515,18 +531,19 @@ function IncomePage() {
                       <TableHead>Owner</TableHead>
                       <TableHead>Match</TableHead>
                       <TableHead>File</TableHead>
+                      <TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {isLoading ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                           Loading…
                         </TableCell>
                       </TableRow>
                     ) : filtered.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                           {showUnmatchedOnly ? "No unmatched payments." : "No income payments yet."}
                         </TableCell>
                       </TableRow>
@@ -575,6 +592,17 @@ function IncomePage() {
                             ) : (
                               <FileText className="h-4 w-4 text-muted-foreground" />
                             )}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => {
+                                if (confirm("Delete this payment?")) del.mutate(p);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))
