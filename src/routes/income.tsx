@@ -627,9 +627,10 @@ function EmailInboundPanel() {
         <div className="border-t px-4 py-4 space-y-3">
           <p className="text-sm text-muted-foreground">
             Forward a payment confirmation screenshot to the address below, with{" "}
-            <span className="font-medium text-foreground">"income"</span> or{" "}
-            <span className="font-medium text-foreground">"payment"</span> somewhere in the email
-            subject line — that's how it's told apart from a regular expense receipt. Only emails
+            <span className="font-medium text-foreground">"income"</span>,{" "}
+            <span className="font-medium text-foreground">"payment"</span>, or{" "}
+            <span className="font-medium text-foreground">"received"</span> somewhere in the
+            email subject line — that's how it's told apart from a regular expense receipt. Only emails
             sent from <span className="font-medium text-foreground">danzammit1@gmail.com</span> are
             processed.
           </p>
