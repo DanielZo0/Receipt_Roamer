@@ -68,7 +68,7 @@ import {
 
 /** Subject line convention to route an inbound email to the income pipeline
  *  instead of the default expense pipeline — e.g. "Income: owner payment". */
-const INCOME_SUBJECT_RE = /\b(income|payment)\b/i;
+const INCOME_SUBJECT_RE = /\b(income|payment|received)\b/i;
 
 async function extractAndSaveAttachment(
   supabase: ReturnType<typeof getSupabase>,
