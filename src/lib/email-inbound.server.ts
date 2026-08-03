@@ -6,7 +6,7 @@
  *
  * Security:
  *   - Verifies Mailgun's HMAC-SHA256 signature on every request.
- *   - Silently ignores any email NOT sent from ALLOWED_SENDER.
+ *   - Silently ignores any email NOT sent from an address in allowed_sender_emails.
  *   - Rejects attachments that are not images or PDFs, or exceed MAX_BYTES.
  */
 
@@ -16,7 +16,6 @@ import type { Database } from "@/integrations/supabase/types";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const ALLOWED_SENDER = "danzammit1@gmail.com";
 const MAX_BYTES = 15 * 1024 * 1024; // 15 MB per attachment
 const ALLOWED_MIME = new Set([
   "image/jpeg",
@@ -265,9 +264,20 @@ export async function handleMailgunWebhook(request: Request): Promise<Response> 
     return new Response("Forbidden", { status: 403 });
   }
 
-  // 2. Check sender
+  // 2. Check sender against the allowed_sender_emails table (managed via the Settings page).
+  const supabase = getSupabase();
   const sender = (form.get("sender") as string | null)?.toLowerCase().trim() ?? "";
-  if (sender !== ALLOWED_SENDER.toLowerCase()) {
+
+  const { data: allowed, error: allowedErr } = await supabase.from("allowed_sender_emails").select("email");
+
+  if (allowedErr || !allowed || allowed.length === 0) {
+    console.error("[email-inbound] Could not load allowed senders — rejecting (fail closed)", allowedErr);
+    // Return 200 so Mailgun doesn't retry — we just don't process it
+    return new Response("OK", { status: 200 });
+  }
+
+  const allowedSenders = new Set(allowed.map((r) => r.email.toLowerCase().trim()));
+  if (!allowedSenders.has(sender)) {
     console.log(`[email-inbound] Ignored email from disallowed sender: ${sender}`);
     // Return 200 so Mailgun doesn't retry — we just don't process it
     return new Response("OK", { status: 200 });
@@ -308,8 +318,6 @@ export async function handleMailgunWebhook(request: Request): Promise<Response> 
       buffer: Buffer.from(arrayBuf),
     });
   }
-
-  const supabase = getSupabase();
 
   if (attachments.length === 0) {
     // No attachment — for income emails, fall back to reading the payment

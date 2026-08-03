@@ -469,6 +469,14 @@ const INBOUND_EMAIL = import.meta.env.VITE_INBOUND_EMAIL as string | undefined;
 
 function EmailInboundPanel() {
   const [open, setOpen] = useState(false);
+  const { data: allowedSenders } = useQuery({
+    queryKey: ["allowed-sender-emails"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("allowed_sender_emails").select("email").order("created_at");
+      if (error) throw error;
+      return data as { email: string }[];
+    },
+  });
 
   if (!INBOUND_EMAIL) return null;
 
@@ -503,8 +511,16 @@ function EmailInboundPanel() {
           <p className="text-sm text-muted-foreground">
             Forward any email containing receipt image(s) or PDF attachment(s) to the address
             below. AI will extract and save each one automatically — only emails sent from{" "}
-            <span className="font-medium text-foreground">danzammit1@gmail.com</span> are
-            processed.
+            <span className="font-medium text-foreground">
+              {allowedSenders && allowedSenders.length > 0
+                ? allowedSenders.map((s) => s.email).join(", ")
+                : "an address configured in Settings"}
+            </span>{" "}
+            are processed. Manage allowed senders in{" "}
+            <Link to="/settings" className="underline">
+              Settings
+            </Link>
+            .
           </p>
           <div className="flex items-center gap-2">
             <code className="flex-1 rounded-md bg-muted px-3 py-2 text-sm font-mono truncate select-all">

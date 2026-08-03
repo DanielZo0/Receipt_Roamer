@@ -8,9 +8,28 @@ export type Database = {
   };
   public: {
     Tables: {
+      allowed_sender_emails: {
+        Row: {
+          created_at: string;
+          email: string;
+          id: string;
+        };
+        Insert: {
+          created_at?: string;
+          email: string;
+          id?: string;
+        };
+        Update: {
+          created_at?: string;
+          email?: string;
+          id?: string;
+        };
+        Relationships: [];
+      };
       associations: {
         Row: {
           address: string | null;
+          condotracker_id: string | null;
           created_at: string;
           id: string;
           keywords: string[];
@@ -19,6 +38,7 @@ export type Database = {
         };
         Insert: {
           address?: string | null;
+          condotracker_id?: string | null;
           created_at?: string;
           id?: string;
           keywords?: string[];
@@ -27,6 +47,7 @@ export type Database = {
         };
         Update: {
           address?: string | null;
+          condotracker_id?: string | null;
           created_at?: string;
           id?: string;
           keywords?: string[];
@@ -122,6 +143,7 @@ export type Database = {
         Row: {
           id: string;
           condominium_id: string | null;
+          condotracker_id: string | null;
           name: string;
           apartment: string | null;
           email: string | null;
@@ -136,6 +158,7 @@ export type Database = {
         Insert: {
           id?: string;
           condominium_id?: string | null;
+          condotracker_id?: string | null;
           name: string;
           apartment?: string | null;
           email?: string | null;
@@ -150,6 +173,7 @@ export type Database = {
         Update: {
           id?: string;
           condominium_id?: string | null;
+          condotracker_id?: string | null;
           name?: string;
           apartment?: string | null;
           email?: string | null;

@@ -6,7 +6,25 @@
 export const expectedSchema: { table: string; columns: string[] }[] = [
   {
     table: "associations",
-    columns: ["id", "name", "address", "notes", "keywords", "created_at"],
+    columns: ["id", "name", "address", "notes", "keywords", "condotracker_id", "created_at"],
+  },
+  {
+    table: "owners",
+    columns: [
+      "id",
+      "condominium_id",
+      "condotracker_id",
+      "name",
+      "apartment",
+      "email",
+      "phone",
+      "id_number",
+      "yearly_contribution",
+      "contribution_paid",
+      "notes",
+      "vat_number",
+      "created_at",
+    ],
   },
   {
     table: "expenses",
