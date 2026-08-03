@@ -60,6 +60,7 @@ function verifyMailgunSignature(
 // ── Shared extraction pipelines (src/lib/extraction/) ────────────────────────
 
 import { runExtractionPipeline } from "@/lib/extraction/pipeline";
+import { ExtractionCancelledError } from "@/lib/extraction/gemini";
 import {
   runIncomeExtractionPipeline,
   runIncomeExtractionPipelineFromText,
@@ -86,6 +87,22 @@ async function extractAndSaveAttachment(
     .upload(storagePath, fileBuffer, { contentType: mimeType, upsert: false });
   if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
 
+  const { data: logRow, error: logInsertErr } = await supabase
+    .from("upload_logs")
+    .insert({
+      file_name: fileName,
+      file_size: fileSize,
+      file_mime: mimeType,
+      status: "processing",
+      source: "email",
+    } as never)
+    .select()
+    .single();
+  if (logInsertErr || !logRow) {
+    console.error("[email-inbound] Failed to create upload_logs row", logInsertErr);
+  }
+  const uploadLogId = (logRow as { id?: string } | null)?.id;
+
   try {
     const { expense, inputTokens, outputTokens, estimatedCostUsd } = await runExtractionPipeline(
       supabase,
@@ -96,37 +113,38 @@ async function extractAndSaveAttachment(
         filePath: storagePath,
         fileSize,
         emailSubject,
+        uploadLogId,
       },
     );
 
-    await supabase.from("upload_logs").insert({
-      file_name: fileName,
-      file_size: fileSize,
-      file_mime: mimeType,
-      status: "success",
-      expense_id: expense.id,
-      error_message: null,
-      input_tokens: inputTokens,
-      output_tokens: outputTokens,
-      estimated_cost_usd: estimatedCostUsd,
-      source: "email",
-    } as never);
+    if (uploadLogId) {
+      await supabase
+        .from("upload_logs")
+        .update({
+          status: "success",
+          expense_id: expense.id,
+          error_message: null,
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          estimated_cost_usd: estimatedCostUsd,
+        } as never)
+        .eq("id", uploadLogId);
+    }
 
     console.log(`[email-inbound] Saved expense ${expense.id} from attachment "${fileName}"`);
   } catch (e) {
-    console.error("[email-inbound] AI extraction failed", e);
-    await supabase.from("upload_logs").insert({
-      file_name: fileName,
-      file_size: fileSize,
-      file_mime: mimeType,
-      status: "error",
-      expense_id: null,
-      error_message: (e as Error).message ?? "Unknown error",
-      input_tokens: null,
-      output_tokens: null,
-      estimated_cost_usd: null,
-      source: "email",
-    } as never);
+    const cancelled = e instanceof ExtractionCancelledError;
+    if (!cancelled) console.error("[email-inbound] AI extraction failed", e);
+    if (uploadLogId) {
+      await supabase
+        .from("upload_logs")
+        .update({
+          status: cancelled ? "cancelled" : "error",
+          expense_id: null,
+          error_message: cancelled ? null : ((e as Error).message ?? "Unknown error"),
+        } as never)
+        .eq("id", uploadLogId);
+    }
   }
 }
 
@@ -145,6 +163,23 @@ async function extractAndSaveIncomeAttachment(
     .upload(storagePath, fileBuffer, { contentType: mimeType, upsert: false });
   if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
 
+  const { data: logRow, error: logInsertErr } = await supabase
+    .from("upload_logs")
+    .insert({
+      file_name: fileName,
+      file_size: fileSize,
+      file_mime: mimeType,
+      status: "processing",
+      pipeline: "income",
+      source: "email",
+    } as never)
+    .select()
+    .single();
+  if (logInsertErr || !logRow) {
+    console.error("[email-inbound] Failed to create upload_logs row", logInsertErr);
+  }
+  const uploadLogId = (logRow as { id?: string } | null)?.id;
+
   try {
     const { payment, inputTokens, outputTokens, estimatedCostUsd } =
       await runIncomeExtractionPipeline(supabase, {
@@ -152,38 +187,37 @@ async function extractAndSaveIncomeAttachment(
         fileMime: mimeType,
         fileBase64,
         filePath: storagePath,
+        uploadLogId,
       });
 
-    await supabase.from("upload_logs").insert({
-      file_name: fileName,
-      file_size: fileSize,
-      file_mime: mimeType,
-      status: "success",
-      pipeline: "income",
-      income_payment_id: payment.id,
-      error_message: null,
-      input_tokens: inputTokens,
-      output_tokens: outputTokens,
-      estimated_cost_usd: estimatedCostUsd,
-      source: "email",
-    } as never);
+    if (uploadLogId) {
+      await supabase
+        .from("upload_logs")
+        .update({
+          status: "success",
+          income_payment_id: payment.id,
+          error_message: null,
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          estimated_cost_usd: estimatedCostUsd,
+        } as never)
+        .eq("id", uploadLogId);
+    }
 
     console.log(`[email-inbound] Saved income payment ${payment.id} from attachment "${fileName}"`);
   } catch (e) {
-    console.error("[email-inbound] Income extraction failed", e);
-    await supabase.from("upload_logs").insert({
-      file_name: fileName,
-      file_size: fileSize,
-      file_mime: mimeType,
-      status: "error",
-      pipeline: "income",
-      income_payment_id: null,
-      error_message: (e as Error).message ?? "Unknown error",
-      input_tokens: null,
-      output_tokens: null,
-      estimated_cost_usd: null,
-      source: "email",
-    } as never);
+    const cancelled = e instanceof ExtractionCancelledError;
+    if (!cancelled) console.error("[email-inbound] Income extraction failed", e);
+    if (uploadLogId) {
+      await supabase
+        .from("upload_logs")
+        .update({
+          status: cancelled ? "cancelled" : "error",
+          income_payment_id: null,
+          error_message: cancelled ? null : ((e as Error).message ?? "Unknown error"),
+        } as never)
+        .eq("id", uploadLogId);
+    }
   }
 }
 
@@ -196,40 +230,56 @@ async function extractAndSaveIncomeFromText(
   emailBodyText: string,
 ) {
   const logName = subject ?? "(no subject)";
-  try {
-    const { payment, inputTokens, outputTokens, estimatedCostUsd } =
-      await runIncomeExtractionPipelineFromText(supabase, { emailBodyText });
 
-    await supabase.from("upload_logs").insert({
+  const { data: logRow, error: logInsertErr } = await supabase
+    .from("upload_logs")
+    .insert({
       file_name: logName,
       file_size: emailBodyText.length,
       file_mime: "text/plain",
-      status: "success",
+      status: "processing",
       pipeline: "income",
-      income_payment_id: payment.id,
-      error_message: null,
-      input_tokens: inputTokens,
-      output_tokens: outputTokens,
-      estimated_cost_usd: estimatedCostUsd,
       source: "email",
-    } as never);
+    } as never)
+    .select()
+    .single();
+  if (logInsertErr || !logRow) {
+    console.error("[email-inbound] Failed to create upload_logs row", logInsertErr);
+  }
+  const uploadLogId = (logRow as { id?: string } | null)?.id;
+
+  try {
+    const { payment, inputTokens, outputTokens, estimatedCostUsd } =
+      await runIncomeExtractionPipelineFromText(supabase, { emailBodyText, uploadLogId });
+
+    if (uploadLogId) {
+      await supabase
+        .from("upload_logs")
+        .update({
+          status: "success",
+          income_payment_id: payment.id,
+          error_message: null,
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          estimated_cost_usd: estimatedCostUsd,
+        } as never)
+        .eq("id", uploadLogId);
+    }
 
     console.log(`[email-inbound] Saved income payment ${payment.id} from email body text`);
   } catch (e) {
-    console.error("[email-inbound] Income text extraction failed", e);
-    await supabase.from("upload_logs").insert({
-      file_name: logName,
-      file_size: emailBodyText.length,
-      file_mime: "text/plain",
-      status: "error",
-      pipeline: "income",
-      income_payment_id: null,
-      error_message: (e as Error).message ?? "Unknown error",
-      input_tokens: null,
-      output_tokens: null,
-      estimated_cost_usd: null,
-      source: "email",
-    } as never);
+    const cancelled = e instanceof ExtractionCancelledError;
+    if (!cancelled) console.error("[email-inbound] Income text extraction failed", e);
+    if (uploadLogId) {
+      await supabase
+        .from("upload_logs")
+        .update({
+          status: cancelled ? "cancelled" : "error",
+          income_payment_id: null,
+          error_message: cancelled ? null : ((e as Error).message ?? "Unknown error"),
+        } as never)
+        .eq("id", uploadLogId);
+    }
   }
 }
 

@@ -270,7 +270,7 @@ export type Database = {
           file_name: string;
           file_size: number | null;
           file_mime: string | null;
-          status: "success" | "error";
+          status: "success" | "error" | "processing" | "cancelled";
           expense_id: string | null;
           error_message: string | null;
           input_tokens: number | null;
@@ -278,6 +278,10 @@ export type Database = {
           estimated_cost_usd: number | null;
           pipeline: "expense" | "income";
           income_payment_id: string | null;
+          source: "upload" | "email";
+          retry_count: number;
+          next_retry_at: string | null;
+          cancel_requested: boolean;
           created_at: string;
         };
         Insert: {
@@ -285,7 +289,7 @@ export type Database = {
           file_name: string;
           file_size?: number | null;
           file_mime?: string | null;
-          status: "success" | "error";
+          status: "success" | "error" | "processing" | "cancelled";
           expense_id?: string | null;
           error_message?: string | null;
           input_tokens?: number | null;
@@ -293,6 +297,10 @@ export type Database = {
           estimated_cost_usd?: number | null;
           pipeline?: "expense" | "income";
           income_payment_id?: string | null;
+          source?: "upload" | "email";
+          retry_count?: number;
+          next_retry_at?: string | null;
+          cancel_requested?: boolean;
           created_at?: string;
         };
         Update: {
@@ -300,7 +308,7 @@ export type Database = {
           file_name?: string;
           file_size?: number | null;
           file_mime?: string | null;
-          status?: "success" | "error";
+          status?: "success" | "error" | "processing" | "cancelled";
           expense_id?: string | null;
           error_message?: string | null;
           input_tokens?: number | null;
@@ -308,6 +316,10 @@ export type Database = {
           estimated_cost_usd?: number | null;
           pipeline?: "expense" | "income";
           income_payment_id?: string | null;
+          source?: "upload" | "email";
+          retry_count?: number;
+          next_retry_at?: string | null;
+          cancel_requested?: boolean;
           created_at?: string;
         };
         Relationships: [

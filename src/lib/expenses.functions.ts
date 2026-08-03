@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Database } from "@/integrations/supabase/types";
 import { runExtractionPipeline } from "@/lib/extraction/pipeline";
+import { ExtractionCancelledError } from "@/lib/extraction/gemini";
 
 function getSupabase() {
   return createClient<Database>(
@@ -27,6 +28,21 @@ export const extractAndSaveExpense = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const supabase = getSupabase();
 
+    const { data: logRow, error: logInsertErr } = await supabase
+      .from("upload_logs")
+      .insert({
+        file_name: data.file_name,
+        file_size: data.file_size ?? null,
+        file_mime: data.file_mime,
+        status: "processing",
+      })
+      .select()
+      .single();
+    if (logInsertErr || !logRow) {
+      console.error("Failed to create upload_logs row", logInsertErr);
+    }
+    const uploadLogId = logRow?.id;
+
     try {
       const { expenses, ledgerGroupId, totalMismatch, inputTokens, outputTokens, estimatedCostUsd } =
         await runExtractionPipeline(supabase, {
@@ -35,34 +51,37 @@ export const extractAndSaveExpense = createServerFn({ method: "POST" })
           fileBase64: data.file_base64,
           filePath: data.file_path,
           fileSize: data.file_size ?? null,
+          uploadLogId,
         });
 
-      await supabase.from("upload_logs").insert({
-        file_name: data.file_name,
-        file_size: data.file_size ?? null,
-        file_mime: data.file_mime,
-        status: "success",
-        expense_id: expenses[0].id,
-        error_message: null,
-        input_tokens: inputTokens,
-        output_tokens: outputTokens,
-        estimated_cost_usd: estimatedCostUsd,
-      });
+      if (uploadLogId) {
+        await supabase
+          .from("upload_logs")
+          .update({
+            status: "success",
+            expense_id: expenses[0].id,
+            error_message: null,
+            input_tokens: inputTokens,
+            output_tokens: outputTokens,
+            estimated_cost_usd: estimatedCostUsd,
+          })
+          .eq("id", uploadLogId);
+      }
 
       return { expenses, ledgerGroupId, totalMismatch };
     } catch (e) {
-      console.error("AI extraction failed", e);
-      await supabase.from("upload_logs").insert({
-        file_name: data.file_name,
-        file_size: data.file_size ?? null,
-        file_mime: data.file_mime,
-        status: "error",
-        expense_id: null,
-        error_message: (e as Error).message ?? "Unknown error",
-        input_tokens: null,
-        output_tokens: null,
-        estimated_cost_usd: null,
-      });
-      throw new Error(`AI extraction failed: ${(e as Error).message}`);
+      const cancelled = e instanceof ExtractionCancelledError;
+      if (!cancelled) console.error("AI extraction failed", e);
+      if (uploadLogId) {
+        await supabase
+          .from("upload_logs")
+          .update({
+            status: cancelled ? "cancelled" : "error",
+            expense_id: null,
+            error_message: cancelled ? null : ((e as Error).message ?? "Unknown error"),
+          })
+          .eq("id", uploadLogId);
+      }
+      throw new Error(cancelled ? "Extraction cancelled" : `AI extraction failed: ${(e as Error).message}`);
     }
   });

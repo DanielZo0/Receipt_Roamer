@@ -15,10 +15,14 @@ export interface RunIncomeExtractionPipelineParams {
   fileMime: string;
   fileBase64: string;
   filePath: string;
+  /** id of the upload_logs row already inserted (status: 'processing') for
+   *  this attempt — used to record retry progress and honor cancellation. */
+  uploadLogId?: string | null;
 }
 
 export interface RunIncomeExtractionPipelineFromTextParams {
   emailBodyText: string;
+  uploadLogId?: string | null;
 }
 
 export interface RunIncomeExtractionPipelineResult {
@@ -105,6 +109,8 @@ export async function runIncomeExtractionPipeline(
       systemPrompt,
       userPrompt,
       file,
+      supabase,
+      uploadLogId: params.uploadLogId ?? undefined,
     });
 
   const payment = await matchAndInsertPayment(
@@ -137,6 +143,8 @@ export async function runIncomeExtractionPipelineFromText(
       apiKey,
       systemPrompt,
       userPrompt,
+      supabase,
+      uploadLogId: params.uploadLogId ?? undefined,
     });
 
   const payment = await matchAndInsertPayment(supabase, extracted, null, "text/plain");
