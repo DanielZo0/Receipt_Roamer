@@ -17,7 +17,19 @@ import {
 import { AppNav } from "@/components/AppNav";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ChevronDown, ChevronUp, ExternalLink, FileText, Pencil, Trash2, Plus, X, Save } from "lucide-react";
+import { runCondoTrackerSync } from "@/lib/condotracker-sync.functions";
+import {
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  FileText,
+  Pencil,
+  Trash2,
+  Plus,
+  X,
+  Save,
+  RefreshCw,
+} from "lucide-react";
 
 export const Route = createFileRoute("/associations")({
   head: () => ({
@@ -103,6 +115,17 @@ function AssociationsPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const condoTrackerSync = useMutation({
+    mutationFn: () => runCondoTrackerSync(),
+    onSuccess: (summary) => {
+      qc.invalidateQueries({ queryKey: ["associations"] });
+      toast.success(
+        `Synced from CondoTracker — associations: +${summary.associations.created}/${summary.associations.updated} updated/-${summary.associations.deleted}, owners: +${summary.owners.created}/${summary.owners.updated} updated/-${summary.owners.deleted}`,
+      );
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   return (
     <div className="min-h-screen bg-background">
       <AppNav />
@@ -111,14 +134,27 @@ function AssociationsPage() {
           <div>
             <h1 className="text-2xl font-bold">Owners Associations</h1>
             <p className="text-sm text-muted-foreground">
-              Add keywords (supplier names, addresses, building names) so the AI can auto-assign expenses correctly.
+              Add keywords (supplier names, addresses, building names) so the AI can auto-assign
+              expenses correctly.
             </p>
           </div>
-          {!adding && (
-            <Button onClick={() => setAdding(true)}>
-              <Plus className="h-4 w-4 mr-1" /> New
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => condoTrackerSync.mutate()}
+              disabled={condoTrackerSync.isPending}
+            >
+              <RefreshCw
+                className={`h-4 w-4 mr-1 ${condoTrackerSync.isPending ? "animate-spin" : ""}`}
+              />
+              Sync from CondoTracker
             </Button>
-          )}
+            {!adding && (
+              <Button onClick={() => setAdding(true)}>
+                <Plus className="h-4 w-4 mr-1" /> New
+              </Button>
+            )}
+          </div>
         </div>
 
         {adding && (
@@ -161,9 +197,7 @@ function AssociationsPage() {
                           <ChevronDown className="h-4 w-4 text-muted-foreground" />
                         )}
                       </div>
-                      {a.address && (
-                        <p className="text-sm text-muted-foreground">{a.address}</p>
-                      )}
+                      {a.address && <p className="text-sm text-muted-foreground">{a.address}</p>}
                       {a.keywords?.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
                           {a.keywords.map((k) => (
@@ -190,7 +224,11 @@ function AssociationsPage() {
                         size="icon"
                         variant="ghost"
                         onClick={() => {
-                          if (confirm(`Delete "${a.name}"? Linked expenses will be kept but unassigned.`)) {
+                          if (
+                            confirm(
+                              `Delete "${a.name}"? Linked expenses will be kept but unassigned.`,
+                            )
+                          ) {
                             del.mutate(a.id);
                           }
                         }}
@@ -249,9 +287,7 @@ function AssocReceipts({ associationId }: { associationId: string }) {
 
   async function openFile(path: string | null) {
     if (!path) return;
-    const { data, error } = await supabase.storage
-      .from("receipts")
-      .createSignedUrl(path, 60 * 5);
+    const { data, error } = await supabase.storage.from("receipts").createSignedUrl(path, 60 * 5);
     if (error || !data?.signedUrl) {
       toast.error("Could not open file");
       return;
@@ -286,9 +322,7 @@ function AssocReceipts({ associationId }: { associationId: string }) {
         <TableBody>
           {data.map((e) => (
             <TableRow key={e.id}>
-              <TableCell className="text-sm tabular-nums">
-                {e.expense_date ?? "—"}
-              </TableCell>
+              <TableCell className="text-sm tabular-nums">{e.expense_date ?? "—"}</TableCell>
               <TableCell className="text-sm">{e.supplier ?? "—"}</TableCell>
               <TableCell className="text-sm tabular-nums">
                 {e.amount != null
@@ -327,7 +361,12 @@ function EditCard({
   saving,
 }: {
   initial?: AssocRow;
-  onSave: (row: { name: string; address: string | null; notes: string | null; keywords: string[] }) => void;
+  onSave: (row: {
+    name: string;
+    address: string | null;
+    notes: string | null;
+    keywords: string[];
+  }) => void;
   onCancel: () => void;
   saving: boolean;
 }) {
@@ -340,11 +379,19 @@ function EditCard({
     <Card className="p-4 mb-3 space-y-3">
       <div>
         <Label>Name</Label>
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Via Roma 12 Condominium" />
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Via Roma 12 Condominium"
+        />
       </div>
       <div>
         <Label>Address</Label>
-        <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Optional" />
+        <Input
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          placeholder="Optional"
+        />
       </div>
       <div>
         <Label>Keywords (comma-separated)</Label>

@@ -46,6 +46,7 @@ const GROUPS: { label: string; icon: React.ComponentType<{ className?: string }>
     items: [
       { to: "/associations", label: "Associations", icon: Building2 },
       { to: "/categories", label: "Categories", icon: Tag },
+      { to: "/settings", label: "Settings", icon: Settings },
     ],
   },
   {

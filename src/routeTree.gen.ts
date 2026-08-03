@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UploadLogsRouteImport } from './routes/upload-logs'
 import { Route as UploadRouteImport } from './routes/upload'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RulesRouteImport } from './routes/rules'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as InsightsRouteImport } from './routes/insights'
@@ -29,6 +30,11 @@ const UploadLogsRoute = UploadLogsRouteImport.update({
 const UploadRoute = UploadRouteImport.update({
   id: '/upload',
   path: '/upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RulesRoute = RulesRouteImport.update({
@@ -87,6 +93,7 @@ export interface FileRoutesByFullPath {
   '/insights': typeof InsightsRoute
   '/login': typeof LoginRoute
   '/rules': typeof RulesRoute
+  '/settings': typeof SettingsRoute
   '/upload': typeof UploadRoute
   '/upload-logs': typeof UploadLogsRoute
 }
@@ -100,6 +107,7 @@ export interface FileRoutesByTo {
   '/insights': typeof InsightsRoute
   '/login': typeof LoginRoute
   '/rules': typeof RulesRoute
+  '/settings': typeof SettingsRoute
   '/upload': typeof UploadRoute
   '/upload-logs': typeof UploadLogsRoute
 }
@@ -114,6 +122,7 @@ export interface FileRoutesById {
   '/insights': typeof InsightsRoute
   '/login': typeof LoginRoute
   '/rules': typeof RulesRoute
+  '/settings': typeof SettingsRoute
   '/upload': typeof UploadRoute
   '/upload-logs': typeof UploadLogsRoute
 }
@@ -129,6 +138,7 @@ export interface FileRouteTypes {
     | '/insights'
     | '/login'
     | '/rules'
+    | '/settings'
     | '/upload'
     | '/upload-logs'
   fileRoutesByTo: FileRoutesByTo
@@ -142,6 +152,7 @@ export interface FileRouteTypes {
     | '/insights'
     | '/login'
     | '/rules'
+    | '/settings'
     | '/upload'
     | '/upload-logs'
   id:
@@ -155,6 +166,7 @@ export interface FileRouteTypes {
     | '/insights'
     | '/login'
     | '/rules'
+    | '/settings'
     | '/upload'
     | '/upload-logs'
   fileRoutesById: FileRoutesById
@@ -169,6 +181,7 @@ export interface RootRouteChildren {
   InsightsRoute: typeof InsightsRoute
   LoginRoute: typeof LoginRoute
   RulesRoute: typeof RulesRoute
+  SettingsRoute: typeof SettingsRoute
   UploadRoute: typeof UploadRoute
   UploadLogsRoute: typeof UploadLogsRoute
 }
@@ -187,6 +200,13 @@ declare module '@tanstack/react-router' {
       path: '/upload'
       fullPath: '/upload'
       preLoaderRoute: typeof UploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/rules': {
@@ -265,6 +285,7 @@ const rootRouteChildren: RootRouteChildren = {
   InsightsRoute: InsightsRoute,
   LoginRoute: LoginRoute,
   RulesRoute: RulesRoute,
+  SettingsRoute: SettingsRoute,
   UploadRoute: UploadRoute,
   UploadLogsRoute: UploadLogsRoute,
 }
