@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 import { callGeminiForExtraction, type Extraction, type GeminiCallResult } from "./gemini";
 import type { ValidationError } from "./validation";
 
@@ -13,8 +15,10 @@ export async function recheckExtraction(params: {
   original: Extraction;
   errors: ValidationError[];
   lowConfidenceAssociation: boolean;
+  supabase?: SupabaseClient<Database>;
+  uploadLogId?: string;
 }): Promise<GeminiCallResult> {
-  const { apiKey, file, original, errors, lowConfidenceAssociation } = params;
+  const { apiKey, file, original, errors, lowConfidenceAssociation, supabase, uploadLogId } = params;
 
   const issues: string[] = errors.map(
     (e) => `- ${e.field}: "${String(e.value)}" is invalid — ${e.reason}`,
@@ -36,5 +40,5 @@ ${issues.join("\n")}
 
 Re-examine the attached document and return a corrected JSON object with exactly these keys: supplier, expense_date, amount, currency, category, association_id, reference_number, reasoning. Use null for any field you genuinely cannot determine. Do not wrap the JSON in markdown.`;
 
-  return callGeminiForExtraction({ apiKey, systemPrompt, userPrompt, file });
+  return callGeminiForExtraction({ apiKey, systemPrompt, userPrompt, file, supabase, uploadLogId });
 }

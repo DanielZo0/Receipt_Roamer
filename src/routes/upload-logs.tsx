@@ -19,6 +19,8 @@ import {
   TrendingUp,
   DollarSign,
   Mail,
+  Ban,
+  CircleSlash,
 } from "lucide-react";
 
 export const Route = createFileRoute("/upload-logs")({
@@ -40,7 +42,7 @@ type LogRow = {
   file_name: string;
   file_size: number | null;
   file_mime: string | null;
-  status: "success" | "error";
+  status: "success" | "error" | "processing" | "cancelled";
   expense_id: string | null;
   error_message: string | null;
   input_tokens: number | null;
@@ -49,6 +51,7 @@ type LogRow = {
   source: "upload" | "email" | null;
   pipeline: "expense" | "income" | null;
   income_payment_id: string | null;
+  retry_count: number | null;
   created_at: string;
   expenses?: {
     supplier: string | null;
@@ -132,7 +135,7 @@ function UploadLogsPage() {
         .select(
           `
           id, file_name, file_size, file_mime, status, expense_id,
-          error_message, input_tokens, output_tokens, estimated_cost_usd, source, pipeline, income_payment_id, created_at,
+          error_message, input_tokens, output_tokens, estimated_cost_usd, source, pipeline, income_payment_id, retry_count, created_at,
           expenses ( supplier, amount, currency, expense_date ),
           income_payments ( payer_name, amount, currency, payment_date )
         `,
@@ -142,6 +145,10 @@ function UploadLogsPage() {
       if (error) throw new Error(error.message);
       return (data ?? []) as unknown as LogRow[];
     },
+    // Poll while any visible row is still processing/retrying, so retry
+    // progress (retry_count) and eventual success/error show up live.
+    refetchInterval: (query) =>
+      query.state.data?.some((l) => l.status === "processing") ? 2000 : false,
   });
 
   async function handleRetry(log: LogRow) {
@@ -192,6 +199,19 @@ function UploadLogsPage() {
       }
     };
     input.click();
+  }
+
+  async function handleCancel(log: LogRow) {
+    const { error } = await supabase
+      .from("upload_logs")
+      .update({ cancel_requested: true } as never)
+      .eq("id", log.id);
+    if (error) {
+      toast.error(error.message || "Failed to cancel");
+    } else {
+      toast.success("Cancelling…");
+    }
+    qc.invalidateQueries({ queryKey: ["upload-logs"] });
   }
 
   // Compute summary stats
@@ -280,6 +300,10 @@ function UploadLogsPage() {
                       <td className="px-4 py-3">
                         {log.status === "success" ? (
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        ) : log.status === "processing" ? (
+                          <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                        ) : log.status === "cancelled" ? (
+                          <CircleSlash className="h-4 w-4 text-muted-foreground" />
                         ) : (
                           <XCircle className="h-4 w-4 text-destructive" />
                         )}
@@ -314,7 +338,13 @@ function UploadLogsPage() {
 
                       {/* Supplier / Error */}
                       <td className="px-4 py-3">
-                        {log.status === "success" ? (
+                        {log.status === "processing" ? (
+                          <span className="text-xs text-muted-foreground">
+                            {log.retry_count ? `Retrying (attempt ${log.retry_count}/3)…` : "Processing…"}
+                          </span>
+                        ) : log.status === "cancelled" ? (
+                          <span className="text-xs text-muted-foreground">Cancelled</span>
+                        ) : log.status === "success" ? (
                           <span className="truncate max-w-[160px] block">
                             {log.pipeline === "income"
                               ? (log.income_payments?.payer_name ?? (
@@ -392,23 +422,36 @@ function UploadLogsPage() {
                         </span>
                       </td>
 
-                      {/* Retry */}
+                      {/* Retry / Cancel */}
                       <td className="px-4 py-3">
-                        {log.status === "error" && log.pipeline !== "income" && (
+                        {log.status === "processing" ? (
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7"
-                            disabled={retrying.has(log.id)}
-                            onClick={() => handleRetry(log)}
-                            title="Retry — select the file again to re-process"
+                            onClick={() => handleCancel(log)}
+                            title="Cancel — stop retrying and mark this attempt as cancelled"
                           >
-                            {retrying.has(log.id) ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <RefreshCw className="h-3.5 w-3.5" />
-                            )}
+                            <Ban className="h-3.5 w-3.5" />
                           </Button>
+                        ) : (
+                          log.status === "error" &&
+                          log.pipeline !== "income" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              disabled={retrying.has(log.id)}
+                              onClick={() => handleRetry(log)}
+                              title="Retry — select the file again to re-process"
+                            >
+                              {retrying.has(log.id) ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                          )
                         )}
                       </td>
                     </tr>

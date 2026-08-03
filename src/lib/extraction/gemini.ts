@@ -1,4 +1,17 @@
 import { z } from "zod";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
+import {
+  ExtractionCancelledError,
+  MAX_ATTEMPTS,
+  MAX_DELAY_MS,
+  makeCancelChecker,
+  parseRetryDelaySeconds,
+  recordRetryAttempt,
+  sleepWithCancelCheck,
+} from "./gemini-retry";
+
+export { ExtractionCancelledError };
 
 export const LedgerLineItemSchema = z.object({
   supplier: z.string().nullable().describe("Property/association/payee name as written on this line"),
@@ -68,37 +81,65 @@ export async function callGeminiForExtraction(params: {
   systemPrompt: string;
   userPrompt: string;
   file?: { mime: string; base64: string };
+  /** When provided (together with uploadLogId), retry attempts are recorded on
+   *  the upload_logs row and a cancel_requested flag on it aborts the retry. */
+  supabase?: SupabaseClient<Database>;
+  uploadLogId?: string;
 }): Promise<GeminiCallResult> {
-  const { apiKey, systemPrompt, userPrompt, file } = params;
+  const { apiKey, systemPrompt, userPrompt, file, supabase, uploadLogId } = params;
 
   const parts: Array<Record<string, unknown>> = [{ text: systemPrompt + "\n\n" + userPrompt }];
   if (file) {
     parts.push({ inline_data: { mime_type: file.mime, data: file.base64 } });
   }
 
-  const resp = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: "user", parts }],
-        generationConfig: {
-          // Note: do NOT set response_mime_type when using inline_data (file) parts —
-          // it conflicts with multimodal requests on some Gemini versions.
-          temperature: 0,
-        },
-      }),
-    },
-  );
+  const checkCancelled = makeCancelChecker(supabase, uploadLogId);
 
-  if (!resp.ok) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let json: any;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: "user", parts }],
+          generationConfig: {
+            // Note: do NOT set response_mime_type when using inline_data (file) parts —
+            // it conflicts with multimodal requests on some Gemini versions.
+            temperature: 0,
+          },
+        }),
+      },
+    );
+
+    if (resp.ok) {
+      json = await resp.json();
+      break;
+    }
+
     const txt = await resp.text();
-    throw new Error(`Gemini API ${resp.status}: ${txt}`);
-  }
+    const isLastAttempt = attempt >= MAX_ATTEMPTS;
+    if (resp.status !== 429 || isLastAttempt) {
+      throw new Error(`Gemini API ${resp.status}: ${txt}`);
+    }
 
-  const json = await resp.json();
+    let parsedError: unknown = null;
+    try {
+      parsedError = JSON.parse(txt);
+    } catch {
+      // ignore — fall back to exponential backoff below
+    }
+    const retryDelaySec = parseRetryDelaySeconds(parsedError);
+    const delayMs = Math.min((retryDelaySec ?? 2 ** attempt) * 1000, MAX_DELAY_MS);
+
+    if (await checkCancelled()) throw new ExtractionCancelledError();
+    await recordRetryAttempt(supabase, uploadLogId, attempt, delayMs);
+
+    await sleepWithCancelCheck(delayMs, checkCancelled);
+  }
   const rawPart = json?.candidates?.[0]?.content?.parts?.[0]?.text;
   const usageMeta = json?.usageMetadata as
     | { promptTokenCount?: number; candidatesTokenCount?: number }

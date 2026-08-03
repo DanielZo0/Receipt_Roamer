@@ -24,6 +24,9 @@ export interface RunExtractionPipelineParams {
    *  fallback to identify the condominium when the receipt image itself
    *  doesn't name it. */
   emailSubject?: string | null;
+  /** id of the upload_logs row already inserted (status: 'processing') for
+   *  this attempt — used to record retry progress and honor cancellation. */
+  uploadLogId?: string | null;
 }
 
 export interface RunExtractionPipelineResult {
@@ -82,6 +85,8 @@ export async function runExtractionPipeline(
     systemPrompt,
     userPrompt,
     file,
+    supabase,
+    uploadLogId: params.uploadLogId ?? undefined,
   });
 
   // ─── Multi-line ledger path: fan out into one expense per line item ─────
@@ -117,6 +122,8 @@ export async function runExtractionPipeline(
       original: extracted,
       errors: validation.errors,
       lowConfidenceAssociation: shouldLLMRecheckAssociation(ruleMatch.confidence),
+      supabase,
+      uploadLogId: params.uploadLogId ?? undefined,
     });
     extracted = recheckResult.extracted;
     inputTokens = (inputTokens ?? 0) + (recheckResult.inputTokens ?? 0);
