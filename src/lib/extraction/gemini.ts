@@ -256,3 +256,57 @@ Return ONLY a single JSON object with exactly these keys: document_type, supplie
 
   return { systemPrompt, userPrompt };
 }
+
+/** Same extraction, but for the plain-text body of a forwarded email instead
+ *  of an image/PDF attachment — used when an expense-notification email
+ *  (e.g. a Wise/Revolut/bank "Transfer sent"/"Payment sent" confirmation)
+ *  has no usable attachment (see runExtractionPipelineFromText). Only
+ *  single_receipt documents are supported on this path — no ledger. */
+export function buildExtractionTextPrompt(
+  emailBodyText: string,
+  associations: AssociationForPrompt[],
+  categories: CategoryForPrompt[],
+) {
+  const list = associations
+    .map(
+      (a) =>
+        `- id=${a.id} | name="${a.name}"${a.address ? ` | address="${a.address}"` : ""}${a.keywords?.length ? ` | keywords=${a.keywords.join(", ")}` : ""}${a.notes ? ` | notes=${a.notes}` : ""}`,
+    )
+    .join("\n");
+
+  const catList = categories
+    .map((c) => `- "${c.name}"${c.keywords?.length ? ` (keywords: ${c.keywords.join(", ")})` : ""}`)
+    .join("\n");
+
+  const systemPrompt =
+    "You are a meticulous accounting assistant that extracts structured expense data from the raw plain-text body of a forwarded email (e.g. a Wise/Revolut/PayPal/bank \"Transfer sent\"/\"Payment sent\" notification, forwarded one or more times through other email clients). You always respond with a single JSON object matching the requested schema. Never invent values — use null when uncertain.";
+
+  const userPrompt = `Below is the raw plain-text body of an email that was forwarded (often multiple times, through different email clients like Gmail/Yahoo/Thunderbird) to report an OUTGOING money transfer or payment that was sent. It may contain nested "Forwarded Message" / "Original Message" headers, mangled character encoding artifacts (stray symbols, zero-width characters), unsubscribe/legal boilerplate, and tracking links — ignore all of that noise and find the actual transfer/payment notification content (typically from a provider like Wise, Revolut, PayPal, or a bank).
+
+Extract:
+- supplier: the name of the person/entity who RECEIVED the money (e.g. "X.XX EUR is now in <name>'s account", or a "To:"/"Recipient" field) — this is who the money was paid to, not the account holder who sent it, and not the email's forwarding addresses.
+- expense_date: the date the transfer/payment was sent, in YYYY-MM-DD format, if stated. If only the forwarding email's own date is available and no transfer-specific date is given, use that email date. Convert from any locale/format.
+- amount: the amount sent (the headline transfer amount, not any fee), as a positive number with a dot decimal separator.
+- currency: ISO 4217 code (e.g. "EUR", "USD", "GBP").
+- category: pick the SINGLE best matching category from the list below by comparing the recipient/context against each category's name and keywords. If nothing fits, use "Other" (or null if "Other" is not in the list).
+- association_id: pick the SINGLE best matching association from the list below by comparing the recipient, any reference text, or keywords. If no association clearly matches, set null — do not guess.
+- reference_number: the "Transfer Number" / "Reference" / "Payment ID" field from the transfer details section, transcribed verbatim (do not add spaces that aren't there, do not paraphrase). Use null if none is present.
+- reasoning: 1-2 sentences on anything unclear, e.g. if you had to disambiguate between multiple forwarders or amounts.
+
+Leave document_type as "single_receipt", and leave line_items and grand_total null.
+
+Associations:
+${list || "(none)"}
+
+Categories:
+${catList || "(none — return null)"}
+
+Return ONLY a single JSON object with exactly these keys: document_type, supplier, expense_date, amount, currency, category, association_id, reference_number, reasoning, line_items, grand_total. Use null for any field that doesn't apply. Do not wrap the JSON in markdown.
+
+Email body:
+"""
+${emailBodyText}
+"""`;
+
+  return { systemPrompt, userPrompt };
+}
