@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-import { buildExtractionPrompt, callGeminiForExtraction, type Extraction } from "./gemini";
+import {
+  buildExtractionPrompt,
+  buildExtractionTextPrompt,
+  callGeminiForExtraction,
+  type Extraction,
+} from "./gemini";
 import { validateExtractedFields, shouldTriggerLLMRecheck, type ValidationError } from "./validation";
 import {
   shouldLLMRecheckAssociation,
@@ -26,6 +31,14 @@ export interface RunExtractionPipelineParams {
   emailSubject?: string | null;
   /** id of the upload_logs row already inserted (status: 'processing') for
    *  this attempt — used to record retry progress and honor cancellation. */
+  uploadLogId?: string | null;
+}
+
+export interface RunExtractionPipelineFromTextParams {
+  emailBodyText: string;
+  /** Email subject line — used as a fallback to identify the condominium
+   *  when the body text itself doesn't name it. */
+  emailSubject?: string | null;
   uploadLogId?: string | null;
 }
 
@@ -202,6 +215,133 @@ export async function runExtractionPipeline(
     validation,
     ruleMatch,
     recheckPerformed,
+    llmModel: "gemini-2.5-flash",
+    inputTokens,
+    outputTokens,
+    estimatedCostUsd,
+    possibleDuplicateOf,
+  });
+
+  return {
+    expense: inserted,
+    expenses: [inserted],
+    ledgerGroupId: null,
+    totalMismatch: null,
+    inputTokens,
+    outputTokens,
+    estimatedCostUsd,
+  };
+}
+
+/**
+ * Extraction pipeline for outgoing-payment notifications reported as plain
+ * email body text instead of a receipt image (e.g. a forwarded Wise/Revolut
+ * "Transfer sent" confirmation with no screenshot attached). Mirrors the
+ * single_receipt path of runExtractionPipeline(), but reads the fields
+ * straight out of the forwarded email text via Gemini instead of OCR, and
+ * skips the Phase 4 LLM re-check (no image to re-examine) — low-confidence
+ * extractions are left unassigned for manual review instead.
+ */
+export async function runExtractionPipelineFromText(
+  supabase: SupabaseClient<Database>,
+  params: RunExtractionPipelineFromTextParams,
+): Promise<RunExtractionPipelineResult> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
+
+  const [{ data: associationRows }, { data: categoryRows }, { data: ruleRows }, { data: categoryRuleRows }] =
+    await Promise.all([
+      supabase.from("associations").select("id, name, address, keywords, notes"),
+      supabase.from("categories").select("name, keywords").order("name"),
+      supabase.from("association_rules").select("id, supplier_pattern, association_id, active").eq("active", true),
+      supabase.from("category_rules").select("id, supplier_pattern, category, active").eq("active", true),
+    ]);
+  const associations: AssociationRow[] = associationRows ?? [];
+  const categories = categoryRows ?? [];
+  const learnedRules: AssociationRuleRow[] = ruleRows ?? [];
+  const learnedCategoryRules: CategoryRuleRow[] = categoryRuleRows ?? [];
+
+  // ─── Phase 1: Gemini extraction ─────────────────────────────────────────
+  const { systemPrompt, userPrompt } = buildExtractionTextPrompt(params.emailBodyText, associations, categories);
+  const { extracted, inputTokens, outputTokens, estimatedCostUsd } = await callGeminiForExtraction({
+    apiKey,
+    systemPrompt,
+    userPrompt,
+    supabase,
+    uploadLogId: params.uploadLogId ?? undefined,
+  });
+
+  // ─── Phase 2: Deterministic validation ──────────────────────────────────
+  const validation = validateExtractedFields(extracted);
+
+  // ─── Phase 3: Rule-based association matching (+ learned rules) ─────────
+  let ruleMatch = matchAssociationWithLearnedRules(extracted.supplier, associations, learnedRules);
+
+  const validIds = new Set(associations.map((a) => a.id));
+  const llmAssocId =
+    extracted.association_id && validIds.has(extracted.association_id) ? extracted.association_id : null;
+  let finalAssociationId = ruleMatch.association_id ?? llmAssocId;
+
+  // Fallback: if the email text gave no confident association match, try
+  // matching the email subject line (often names the condominium directly).
+  if (!finalAssociationId && params.emailSubject) {
+    const subjectMatch = matchAssociation({ supplier: params.emailSubject }, associations);
+    if (subjectMatch.association_id) {
+      finalAssociationId = subjectMatch.association_id;
+      ruleMatch = subjectMatch;
+    }
+  }
+
+  // Normalise category to one of the known names (case-insensitive)
+  const catNames = categories.map((c) => c.name);
+  let category = extracted.category;
+  if (category && catNames.length) {
+    const match = catNames.find((n) => n.toLowerCase() === category!.toLowerCase());
+    category = match ?? category;
+  }
+
+  // Learned category rules take priority over Gemini's guess.
+  const learnedCategoryMatch = matchLearnedCategoryRule(extracted.supplier, learnedCategoryRules);
+  if (learnedCategoryMatch.category) {
+    category = learnedCategoryMatch.category;
+  }
+
+  // Duplicate-receipt detection: same reference number, or same supplier + amount within +/-1 day of an existing expense.
+  const possibleDuplicateOf = await findPossibleDuplicate(supabase, {
+    supplier: extracted.supplier,
+    amount: extracted.amount,
+    expenseDate: extracted.expense_date,
+    referenceNumber: extracted.reference_number,
+  });
+
+  const { data: inserted, error } = await supabase
+    .from("expenses")
+    .insert({
+      association_id: finalAssociationId,
+      supplier: extracted.supplier,
+      expense_date: extracted.expense_date,
+      amount: extracted.amount,
+      currency: extracted.currency,
+      category,
+      reference_number: extracted.reference_number,
+      file_path: null,
+      file_mime: "text/plain",
+      raw_extraction: extracted as never,
+    })
+    .select()
+    .single();
+
+  if (error || !inserted) {
+    throw new Error(error?.message ?? "Failed to insert expense");
+  }
+
+  await writeAuditLog(supabase, {
+    expenseId: inserted.id,
+    fileName: params.emailSubject ?? "(email body text)",
+    extracted,
+    validation,
+    ruleMatch,
+    recheckPerformed: false,
     llmModel: "gemini-2.5-flash",
     inputTokens,
     outputTokens,

@@ -59,7 +59,7 @@ function verifyMailgunSignature(
 
 // ── Shared extraction pipelines (src/lib/extraction/) ────────────────────────
 
-import { runExtractionPipeline } from "@/lib/extraction/pipeline";
+import { runExtractionPipeline, runExtractionPipelineFromText } from "@/lib/extraction/pipeline";
 import { ExtractionCancelledError } from "@/lib/extraction/gemini";
 import {
   runIncomeExtractionPipeline,
@@ -283,6 +283,70 @@ async function extractAndSaveIncomeFromText(
   }
 }
 
+/** Handles a (non-income) email that has no usable attachment, by reading
+ *  the payment details straight out of the forwarded email's plain text
+ *  body (e.g. a forwarded Wise "Transfer sent" outgoing-payment notification). */
+async function extractAndSaveExpenseFromText(
+  supabase: ReturnType<typeof getSupabase>,
+  subject: string | null,
+  emailBodyText: string,
+) {
+  const logName = subject ?? "(no subject)";
+
+  const { data: logRow, error: logInsertErr } = await supabase
+    .from("upload_logs")
+    .insert({
+      file_name: logName,
+      file_size: emailBodyText.length,
+      file_mime: "text/plain",
+      status: "processing",
+      pipeline: "expense",
+      source: "email",
+    } as never)
+    .select()
+    .single();
+  if (logInsertErr || !logRow) {
+    console.error("[email-inbound] Failed to create upload_logs row", logInsertErr);
+  }
+  const uploadLogId = (logRow as { id?: string } | null)?.id;
+
+  try {
+    const { expense, inputTokens, outputTokens, estimatedCostUsd } = await runExtractionPipelineFromText(
+      supabase,
+      { emailBodyText, emailSubject: subject, uploadLogId },
+    );
+
+    if (uploadLogId) {
+      await supabase
+        .from("upload_logs")
+        .update({
+          status: "success",
+          expense_id: expense.id,
+          error_message: null,
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          estimated_cost_usd: estimatedCostUsd,
+        } as never)
+        .eq("id", uploadLogId);
+    }
+
+    console.log(`[email-inbound] Saved expense ${expense.id} from email body text`);
+  } catch (e) {
+    const cancelled = e instanceof ExtractionCancelledError;
+    if (!cancelled) console.error("[email-inbound] Expense text extraction failed", e);
+    if (uploadLogId) {
+      await supabase
+        .from("upload_logs")
+        .update({
+          status: cancelled ? "cancelled" : "error",
+          expense_id: null,
+          error_message: cancelled ? null : ((e as Error).message ?? "Unknown error"),
+        } as never)
+        .eq("id", uploadLogId);
+    }
+  }
+}
+
 // ── Main webhook handler ─────────────────────────────────────────────────────
 
 export async function handleMailgunWebhook(request: Request): Promise<Response> {
@@ -404,6 +468,12 @@ export async function handleMailgunWebhook(request: Request): Promise<Response> 
     if (isIncome && bodyText) {
       console.log("[email-inbound] No attachment — extracting income payment from email body text");
       await extractAndSaveIncomeFromText(supabase, subject, bodyText);
+      return new Response("OK", { status: 200 });
+    }
+
+    if (bodyText) {
+      console.log("[email-inbound] No attachment — extracting expense from email body text");
+      await extractAndSaveExpenseFromText(supabase, subject, bodyText);
       return new Response("OK", { status: 200 });
     }
 
