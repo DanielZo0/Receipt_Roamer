@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { AppNav } from "@/components/AppNav";
+import { MobileCardList, MobileCard, MobileCardRow } from "@/components/ui/responsive-table";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
@@ -121,57 +122,93 @@ function AssociationRulesTable({ associations }: { associations: { id: string; n
   const assocName = (id: string) => associations.find((a) => a.id === id)?.name ?? "—";
 
   return (
-    <Card className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Supplier contains</TableHead>
-            <TableHead>Association</TableHead>
-            <TableHead>Active</TableHead>
-            <TableHead></TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {isLoading ? (
+    <>
+      <Card className="overflow-x-auto hidden md:block">
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                Loading…
-              </TableCell>
+              <TableHead>Supplier contains</TableHead>
+              <TableHead>Association</TableHead>
+              <TableHead>Active</TableHead>
+              <TableHead></TableHead>
             </TableRow>
-          ) : !rules || rules.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                No rules yet. Correct an expense's association on the Expenses page and choose "Save rule".
-              </TableCell>
-            </TableRow>
-          ) : (
-            rules.map((r) => (
-              <TableRow key={r.id}>
-                <TableCell className="font-mono text-sm">{r.supplier_pattern}</TableCell>
-                <TableCell>{assocName(r.association_id)}</TableCell>
-                <TableCell>
-                  <Switch
-                    checked={r.active}
-                    onCheckedChange={(checked) => toggleActive.mutate({ id: r.id, active: checked })}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => {
-                      if (confirm("Delete this rule?")) del.mutate(r.id);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                  Loading…
                 </TableCell>
               </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-    </Card>
+            ) : !rules || rules.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                  No rules yet. Correct an expense's association on the Expenses page and choose "Save rule".
+                </TableCell>
+              </TableRow>
+            ) : (
+              rules.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell className="font-mono text-sm">{r.supplier_pattern}</TableCell>
+                  <TableCell>{assocName(r.association_id)}</TableCell>
+                  <TableCell>
+                    <Switch
+                      checked={r.active}
+                      onCheckedChange={(checked) => toggleActive.mutate({ id: r.id, active: checked })}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        if (confirm("Delete this rule?")) del.mutate(r.id);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </Card>
+
+      {isLoading ? (
+        <p className="text-center text-muted-foreground py-8 md:hidden">Loading…</p>
+      ) : !rules || rules.length === 0 ? (
+        <p className="text-center text-muted-foreground py-8 md:hidden">
+          No rules yet. Correct an expense's association on the Expenses page and choose "Save rule".
+        </p>
+      ) : (
+        <MobileCardList>
+          {rules.map((r) => (
+            <MobileCard key={r.id}>
+              <MobileCardRow>
+                <span className="font-mono">{r.supplier_pattern}</span>
+                <Switch
+                  checked={r.active}
+                  onCheckedChange={(checked) => toggleActive.mutate({ id: r.id, active: checked })}
+                />
+              </MobileCardRow>
+              <MobileCardRow>
+                <span>{assocName(r.association_id)}</span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => {
+                    if (confirm("Delete this rule?")) del.mutate(r.id);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </MobileCardRow>
+            </MobileCard>
+          ))}
+        </MobileCardList>
+      )}
+    </>
   );
 }
 
@@ -212,56 +249,92 @@ function CategoryRulesTable() {
   });
 
   return (
-    <Card className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Supplier contains</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead>Active</TableHead>
-            <TableHead></TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {isLoading ? (
+    <>
+      <Card className="overflow-x-auto hidden md:block">
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                Loading…
-              </TableCell>
+              <TableHead>Supplier contains</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Active</TableHead>
+              <TableHead></TableHead>
             </TableRow>
-          ) : !rules || rules.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                No rules yet. Correct an expense's category on the Expenses page and choose "Save rule".
-              </TableCell>
-            </TableRow>
-          ) : (
-            rules.map((r) => (
-              <TableRow key={r.id}>
-                <TableCell className="font-mono text-sm">{r.supplier_pattern}</TableCell>
-                <TableCell>{r.category}</TableCell>
-                <TableCell>
-                  <Switch
-                    checked={r.active}
-                    onCheckedChange={(checked) => toggleActive.mutate({ id: r.id, active: checked })}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => {
-                      if (confirm("Delete this rule?")) del.mutate(r.id);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                  Loading…
                 </TableCell>
               </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-    </Card>
+            ) : !rules || rules.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                  No rules yet. Correct an expense's category on the Expenses page and choose "Save rule".
+                </TableCell>
+              </TableRow>
+            ) : (
+              rules.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell className="font-mono text-sm">{r.supplier_pattern}</TableCell>
+                  <TableCell>{r.category}</TableCell>
+                  <TableCell>
+                    <Switch
+                      checked={r.active}
+                      onCheckedChange={(checked) => toggleActive.mutate({ id: r.id, active: checked })}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        if (confirm("Delete this rule?")) del.mutate(r.id);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </Card>
+
+      {isLoading ? (
+        <p className="text-center text-muted-foreground py-8 md:hidden">Loading…</p>
+      ) : !rules || rules.length === 0 ? (
+        <p className="text-center text-muted-foreground py-8 md:hidden">
+          No rules yet. Correct an expense's category on the Expenses page and choose "Save rule".
+        </p>
+      ) : (
+        <MobileCardList>
+          {rules.map((r) => (
+            <MobileCard key={r.id}>
+              <MobileCardRow>
+                <span className="font-mono">{r.supplier_pattern}</span>
+                <Switch
+                  checked={r.active}
+                  onCheckedChange={(checked) => toggleActive.mutate({ id: r.id, active: checked })}
+                />
+              </MobileCardRow>
+              <MobileCardRow>
+                <span>{r.category}</span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => {
+                    if (confirm("Delete this rule?")) del.mutate(r.id);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </MobileCardRow>
+            </MobileCard>
+          ))}
+        </MobileCardList>
+      )}
+    </>
   );
 }

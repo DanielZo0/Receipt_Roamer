@@ -261,49 +261,77 @@ function CatReceipts({ categoryName }: { categoryName: string }) {
   }
 
   return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Supplier</TableHead>
-            <TableHead>Amount</TableHead>
-            <TableHead>Association</TableHead>
-            <TableHead className="w-10">File</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data.map((e) => (
-            <TableRow key={e.id}>
-              <TableCell className="text-sm tabular-nums">
-                {e.expense_date ?? "—"}
-              </TableCell>
-              <TableCell className="text-sm">{e.supplier ?? "—"}</TableCell>
-              <TableCell className="text-sm tabular-nums">
+    <>
+      <div className="overflow-x-auto hidden md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Supplier</TableHead>
+              <TableHead>Amount</TableHead>
+              <TableHead>Association</TableHead>
+              <TableHead className="w-10">File</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.map((e) => (
+              <TableRow key={e.id}>
+                <TableCell className="text-sm tabular-nums">
+                  {e.expense_date ?? "—"}
+                </TableCell>
+                <TableCell className="text-sm">{e.supplier ?? "—"}</TableCell>
+                <TableCell className="text-sm tabular-nums">
+                  {e.amount != null
+                    ? `${e.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${e.currency ?? ""}`
+                    : "—"}
+                </TableCell>
+                <TableCell className="text-sm">{assocName(e.association_id)}</TableCell>
+                <TableCell>
+                  {e.file_path ? (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      onClick={() => openFile(e.file_path)}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Button>
+                  ) : (
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <div className="divide-y md:hidden">
+        {data.map((e) => (
+          <div key={e.id} className="p-3 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-medium truncate">{e.supplier ?? "—"}</p>
+              <p className="text-xs text-muted-foreground">
+                {e.expense_date ?? "—"} · {assocName(e.association_id)}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className="text-sm tabular-nums">
                 {e.amount != null
                   ? `${e.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${e.currency ?? ""}`
                   : "—"}
-              </TableCell>
-              <TableCell className="text-sm">{assocName(e.association_id)}</TableCell>
-              <TableCell>
-                {e.file_path ? (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7"
-                    onClick={() => openFile(e.file_path)}
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </Button>
-                ) : (
-                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+              </span>
+              {e.file_path ? (
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openFile(e.file_path)}>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 

@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { AppNav } from "@/components/AppNav";
+import { MobileCardList, MobileCard, MobileCardRow } from "@/components/ui/responsive-table";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/corrections")({
@@ -137,7 +138,7 @@ function CorrectionsPage() {
           </Select>
         </div>
 
-        <Card className="overflow-x-auto">
+        <Card className="overflow-x-auto hidden md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -185,6 +186,40 @@ function CorrectionsPage() {
             </TableBody>
           </Table>
         </Card>
+
+        {isLoading ? (
+          <p className="text-center text-muted-foreground py-8 md:hidden">Loading…</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-center text-muted-foreground py-8 md:hidden">No corrections recorded yet.</p>
+        ) : (
+          <MobileCardList>
+            {filtered.map((c) => {
+              const expense = expenseById.get(c.expense_id);
+              return (
+                <MobileCard key={c.id}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium truncate">
+                      {expense?.supplier ?? "—"}
+                      {expense?.expense_date ? ` (${expense.expense_date})` : ""}
+                    </span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      {new Date(c.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <MobileCardRow>
+                    <span className="text-muted-foreground font-mono">{c.field}</span>
+                  </MobileCardRow>
+                  <MobileCardRow>
+                    <span className="text-muted-foreground">
+                      {displayValue(c.field, c.original_value)}
+                    </span>
+                    <span>→ {displayValue(c.field, c.corrected_value)}</span>
+                  </MobileCardRow>
+                </MobileCard>
+              );
+            })}
+          </MobileCardList>
+        )}
       </main>
     </div>
   );

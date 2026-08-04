@@ -5,6 +5,7 @@ import { useState } from "react";
 import { AppNav } from "@/components/AppNav";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { MobileCardList, MobileCard, MobileCardHeader } from "@/components/ui/responsive-table";
 import { supabase } from "@/integrations/supabase/client";
 import { extractAndSaveExpense } from "@/lib/expenses.functions";
 import { toast } from "sonner";
@@ -270,7 +271,8 @@ function UploadLogsPage() {
             </p>
           </Card>
         ) : (
-          <Card className="overflow-hidden">
+          <>
+          <Card className="overflow-hidden hidden md:block">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -460,6 +462,123 @@ function UploadLogsPage() {
               </table>
             </div>
           </Card>
+
+          <MobileCardList>
+            {logs!.map((log) => (
+              <MobileCard key={log.id}>
+                <MobileCardHeader>
+                  <div className="flex items-center gap-2 min-w-0">
+                    {log.status === "success" ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    ) : log.status === "processing" ? (
+                      <Loader2 className="h-4 w-4 text-primary animate-spin flex-shrink-0" />
+                    ) : log.status === "cancelled" ? (
+                      <CircleSlash className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />
+                    )}
+                    <FileTypeIcon mime={log.file_mime} />
+                    <p className="font-medium truncate text-sm" title={log.file_name}>
+                      {log.file_name}
+                    </p>
+                  </div>
+                  {log.status === "processing" ? (
+                    <Ban
+                      className="h-4 w-4 text-muted-foreground flex-shrink-0 cursor-pointer"
+                      onClick={() => handleCancel(log)}
+                    />
+                  ) : (
+                    log.status === "error" &&
+                    log.pipeline !== "income" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 flex-shrink-0"
+                        disabled={retrying.has(log.id)}
+                        onClick={() => handleRetry(log)}
+                        title="Retry — select the file again to re-process"
+                      >
+                        {retrying.has(log.id) ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    )
+                  )}
+                </MobileCardHeader>
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs text-muted-foreground">{formatBytes(log.file_size)}</span>
+                  {log.source === "email" && (
+                    <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                      <Mail className="h-2.5 w-2.5" /> Email
+                    </span>
+                  )}
+                  {log.pipeline === "income" && (
+                    <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 font-medium">
+                      <DollarSign className="h-2.5 w-2.5" /> Income
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  {log.status === "processing" ? (
+                    <span className="text-xs text-muted-foreground">
+                      {log.retry_count ? `Retrying (attempt ${log.retry_count}/3)…` : "Processing…"}
+                    </span>
+                  ) : log.status === "cancelled" ? (
+                    <span className="text-xs text-muted-foreground">Cancelled</span>
+                  ) : log.status === "success" ? (
+                    <span className="truncate">
+                      {log.pipeline === "income"
+                        ? (log.income_payments?.payer_name ?? (
+                            <span className="text-muted-foreground">Unknown payer</span>
+                          ))
+                        : (log.expenses?.supplier ?? (
+                            <span className="text-muted-foreground">Unknown</span>
+                          ))}
+                    </span>
+                  ) : (
+                    <span
+                      className="text-destructive text-xs line-clamp-2"
+                      title={log.error_message ?? ""}
+                    >
+                      {log.error_message ?? "Unknown error"}
+                    </span>
+                  )}
+                  {log.status === "success" && (
+                    <span className="font-mono flex-shrink-0">
+                      {formatAmount(
+                        log.pipeline === "income"
+                          ? (log.income_payments?.amount ?? null)
+                          : (log.expenses?.amount ?? null),
+                        log.pipeline === "income"
+                          ? (log.income_payments?.currency ?? null)
+                          : (log.expenses?.currency ?? null),
+                      )}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t">
+                  <span>
+                    {new Date(log.created_at).toLocaleDateString(undefined, {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })}{" "}
+                    {new Date(log.created_at).toLocaleTimeString(undefined, {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                  <span>{formatCost(log.estimated_cost_usd)}</span>
+                </div>
+              </MobileCard>
+            ))}
+          </MobileCardList>
+          </>
         )}
       </main>
     </div>

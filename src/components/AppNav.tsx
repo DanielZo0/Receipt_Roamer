@@ -1,4 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useState } from "react";
 import {
   FileText,
   Home,
@@ -13,6 +14,7 @@ import {
   Wallet,
   Settings,
   ChevronDown,
+  Menu,
 } from "lucide-react";
 import { useRouter } from "@tanstack/react-router";
 import { logoutFn } from "../lib/auth";
@@ -23,6 +25,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 const linkBase =
@@ -64,6 +73,7 @@ const GROUPS: { label: string; icon: React.ComponentType<{ className?: string }>
 export function AppNav() {
   const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -77,12 +87,14 @@ export function AppNav() {
 
   return (
     <header className="border-b bg-card">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-2 flex-wrap justify-between">
-        <div className="flex items-center gap-1 flex-wrap">
-          <Link to="/" className="font-semibold text-foreground mr-4">
-            Receipt Tracker
-          </Link>
-          <nav className="flex items-center gap-1 flex-wrap">
+      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+        <Link to="/" className="font-semibold text-foreground">
+          Receipt Tracker
+        </Link>
+
+        {/* Desktop nav */}
+        <div className="hidden md:flex items-center gap-1 flex-1 justify-between">
+          <nav className="flex items-center gap-1 flex-wrap ml-4">
             <Link
               to="/"
               className={linkBase}
@@ -123,13 +135,78 @@ export function AppNav() {
               );
             })}
           </nav>
+
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <LogOut className="h-4 w-4" /> Log Out
+          </button>
         </div>
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors ml-auto"
-        >
-          <LogOut className="h-4 w-4" /> Log Out
-        </button>
+
+        {/* Mobile nav */}
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetTrigger asChild>
+            <button
+              className="md:hidden flex items-center justify-center h-10 w-10 rounded-md text-foreground hover:bg-accent transition-colors"
+              aria-label="Open menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-3/4 sm:max-w-xs flex flex-col">
+            <SheetHeader>
+              <SheetTitle>Receipt Tracker</SheetTitle>
+            </SheetHeader>
+            <nav className="flex-1 overflow-y-auto -mx-1 px-1 space-y-4">
+              <Link
+                to="/"
+                className={linkBase}
+                activeOptions={{ exact: true }}
+                activeProps={{ className: cn(linkBase, activeClass) }}
+                onClick={() => setMobileOpen(false)}
+              >
+                <Home className="h-4 w-4" /> Dashboard
+              </Link>
+
+              {GROUPS.map((group) => {
+                const GroupIcon = group.icon;
+                return (
+                  <div key={group.label}>
+                    <div className="flex items-center gap-2 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <GroupIcon className="h-3.5 w-3.5" /> {group.label}
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      {group.items.map((item) => {
+                        const ItemIcon = item.icon;
+                        const itemActive = pathname.startsWith(item.to);
+                        return (
+                          <Link
+                            key={item.to}
+                            to={item.to}
+                            className={cn(linkBase, itemActive && activeClass)}
+                            onClick={() => setMobileOpen(false)}
+                          >
+                            <ItemIcon className="h-4 w-4" /> {item.label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </nav>
+            <button
+              onClick={() => {
+                setMobileOpen(false);
+                handleLogout();
+              }}
+              className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
+            >
+              <LogOut className="h-4 w-4" /> Log Out
+            </button>
+          </SheetContent>
+        </Sheet>
       </div>
     </header>
   );

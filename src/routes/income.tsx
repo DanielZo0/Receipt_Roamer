@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppNav } from "@/components/AppNav";
 import { OwnerCombobox, type OwnerLite, type AssociationLite } from "@/components/OwnerCombobox";
+import { MobileCardList, MobileCard, MobileCardHeader, MobileCardRow } from "@/components/ui/responsive-table";
 import { supabase } from "@/integrations/supabase/client";
 import { extractAndSaveIncomePayment } from "@/lib/income.functions";
 import { toast } from "sonner";
@@ -375,7 +376,7 @@ function IncomePage() {
         </p>
 
         <Card
-          className={`p-8 border-2 border-dashed text-center transition-colors cursor-pointer mb-4 ${
+          className={`p-6 sm:p-8 min-h-[160px] sm:min-h-[200px] flex flex-col items-center justify-center border-2 border-dashed text-center transition-colors cursor-pointer mb-4 ${
             dragOver ? "border-primary bg-accent" : "border-border hover:border-primary/50"
           }`}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -388,8 +389,11 @@ function IncomePage() {
           aria-label="Upload payment screenshots drop zone"
         >
           <UploadIcon className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-          <p className="text-sm text-muted-foreground mb-3">Drag payment screenshots here, or click to choose</p>
-          <p className="text-xs text-muted-foreground">Images · Up to 15 MB each · Multiple files supported</p>
+          <p className="text-sm text-muted-foreground mb-3">Drag payment screenshots here, or tap to choose</p>
+          <Button type="button" size="lg" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}>
+            Browse files
+          </Button>
+          <p className="text-xs text-muted-foreground mt-3">Images · Up to 15 MB each · Multiple files supported</p>
           <input
             ref={fileInputRef}
             type="file"
@@ -512,7 +516,7 @@ function IncomePage() {
                 )}
               </div>
 
-              <Card className="overflow-x-auto">
+              <Card className="overflow-x-auto hidden md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -610,6 +614,82 @@ function IncomePage() {
                   </TableBody>
                 </Table>
               </Card>
+
+              {isLoading ? (
+                <p className="text-center text-muted-foreground py-8 md:hidden">Loading…</p>
+              ) : filtered.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8 md:hidden">
+                  {showUnmatchedOnly ? "No unmatched payments." : "No income payments yet."}
+                </p>
+              ) : (
+                <MobileCardList>
+                  {filtered.map((p) => (
+                    <MobileCard key={p.id} className={!p.owner_id ? "bg-amber-500/5" : undefined}>
+                      <MobileCardHeader>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Checkbox
+                            checked={selected.has(p.id)}
+                            onCheckedChange={() => toggleRow(p.id)}
+                            aria-label={`Select payment from ${p.payer_name ?? "unknown"}`}
+                          />
+                          <span className="text-sm text-muted-foreground whitespace-nowrap">
+                            {p.payment_date ?? "—"}
+                          </span>
+                        </div>
+                        <span className="font-semibold whitespace-nowrap">
+                          {p.amount != null ? `${p.amount.toFixed(2)} ${p.currency ?? ""}` : "—"}
+                        </span>
+                      </MobileCardHeader>
+
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium truncate">{p.payer_name ?? "—"}</span>
+                        {p.match_confidence != null && (
+                          <Badge variant={p.owner_id ? "outline" : "destructive"} className="flex-shrink-0">
+                            {(p.match_confidence * 100).toFixed(0)}%
+                          </Badge>
+                        )}
+                      </div>
+
+                      {p.reference_string && (
+                        <p className="text-xs text-muted-foreground truncate" title={p.reference_string}>
+                          {p.reference_string}
+                        </p>
+                      )}
+
+                      <MobileCardRow>
+                        <span className="text-muted-foreground">Condo</span>
+                        <span>{condoName(p.condominium_id)}</span>
+                      </MobileCardRow>
+
+                      <OwnerCombobox
+                        owners={(owners ?? []) as OwnerLite[]}
+                        associations={(associations ?? []) as AssociationLite[]}
+                        value={p.owner_id}
+                        onChange={(ownerId) => update.mutate({ id: p.id, owner_id: ownerId })}
+                        preferredCondominiumId={p.condominium_id}
+                        className="w-full"
+                      />
+
+                      <div className="flex items-center justify-end gap-1 pt-1 border-t">
+                        {p.file_path && (
+                          <Button size="icon" variant="ghost" onClick={() => openFile(p.file_path)}>
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => {
+                            if (confirm("Delete this payment?")) del.mutate(p);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </MobileCard>
+                  ))}
+                </MobileCardList>
+              )}
             </>
           );
         })()}
