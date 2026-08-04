@@ -377,7 +377,7 @@ function UploadPage() {
 
         {/* Drop zone */}
         <Card
-          className={`p-8 border-2 border-dashed text-center transition-colors cursor-pointer mb-4 ${
+          className={`p-6 sm:p-8 min-h-[160px] sm:min-h-[200px] flex flex-col items-center justify-center border-2 border-dashed text-center transition-colors cursor-pointer mb-4 ${
             dragOver ? "border-primary bg-accent" : "border-border hover:border-primary/50"
           }`}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -391,9 +391,12 @@ function UploadPage() {
         >
           <UploadIcon className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
           <p className="text-sm text-muted-foreground mb-3">
-            Drag files here, or click to choose
+            Drag files here, or tap to choose
           </p>
-          <p className="text-xs text-muted-foreground">
+          <Button type="button" size="lg" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}>
+            Browse files
+          </Button>
+          <p className="text-xs text-muted-foreground mt-3">
             Images &amp; PDFs · Up to 15 MB each · Multiple files supported
           </p>
           <input

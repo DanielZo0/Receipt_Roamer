@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { AppNav } from "@/components/AppNav";
+import { MobileCardList, MobileCard } from "@/components/ui/responsive-table";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
@@ -110,67 +111,101 @@ function AllowedSendersTable() {
   };
 
   return (
-    <Card className="overflow-x-auto">
-      <div className="flex items-center gap-2 p-4 border-b">
-        <Input
-          type="email"
-          placeholder="name@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleAdd();
-          }}
-          className="max-w-xs"
-        />
-        <Button onClick={handleAdd} disabled={add.isPending}>
-          Add
-        </Button>
-      </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Email</TableHead>
-            <TableHead></TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {isLoading ? (
-            <TableRow>
-              <TableCell colSpan={2} className="text-center text-muted-foreground py-8">
-                Loading…
-              </TableCell>
-            </TableRow>
-          ) : !rows || rows.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={2} className="text-center text-muted-foreground py-8">
-                No allowed senders — inbound emails will be rejected until one is added.
-              </TableCell>
-            </TableRow>
-          ) : (
-            rows.map((r) => {
-              const isLast = rows.length === 1;
-              return (
-                <TableRow key={r.id}>
-                  <TableCell className="font-mono text-sm">{r.email}</TableCell>
-                  <TableCell>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      disabled={isLast}
-                      title={isLast ? "At least one allowed sender is required" : "Remove"}
-                      onClick={() => {
-                        if (confirm(`Remove ${r.email}?`)) del.mutate(r.id);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+    <>
+      <Card className="overflow-x-auto">
+        <div className="flex items-center gap-2 p-4 border-b flex-wrap">
+          <Input
+            type="email"
+            placeholder="name@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleAdd();
+            }}
+            className="max-w-xs flex-1 min-w-0"
+          />
+          <Button onClick={handleAdd} disabled={add.isPending}>
+            Add
+          </Button>
+        </div>
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Email</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={2} className="text-center text-muted-foreground py-8">
+                    Loading…
                   </TableCell>
                 </TableRow>
-              );
-            })
-          )}
-        </TableBody>
-      </Table>
-    </Card>
+              ) : !rows || rows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={2} className="text-center text-muted-foreground py-8">
+                    No allowed senders — inbound emails will be rejected until one is added.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                rows.map((r) => {
+                  const isLast = rows.length === 1;
+                  return (
+                    <TableRow key={r.id}>
+                      <TableCell className="font-mono text-sm">{r.email}</TableCell>
+                      <TableCell>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          disabled={isLast}
+                          title={isLast ? "At least one allowed sender is required" : "Remove"}
+                          onClick={() => {
+                            if (confirm(`Remove ${r.email}?`)) del.mutate(r.id);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
+
+      {isLoading ? (
+        <p className="text-center text-muted-foreground py-8 md:hidden">Loading…</p>
+      ) : !rows || rows.length === 0 ? (
+        <p className="text-center text-muted-foreground py-8 md:hidden">
+          No allowed senders — inbound emails will be rejected until one is added.
+        </p>
+      ) : (
+        <MobileCardList>
+          {rows.map((r) => {
+            const isLast = rows.length === 1;
+            return (
+              <MobileCard key={r.id} className="flex-row items-center justify-between flex">
+                <span className="font-mono text-sm truncate">{r.email}</span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  disabled={isLast}
+                  title={isLast ? "At least one allowed sender is required" : "Remove"}
+                  onClick={() => {
+                    if (confirm(`Remove ${r.email}?`)) del.mutate(r.id);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </MobileCard>
+            );
+          })}
+        </MobileCardList>
+      )}
+    </>
   );
 }

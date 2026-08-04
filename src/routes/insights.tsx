@@ -154,7 +154,7 @@ function InsightsPage() {
             Not enough expense history yet to compute insights.
           </Card>
         ) : (
-          <div className="grid sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {insights.map((i) => {
               const isAnomaly = i.deltaPct != null && i.deltaPct >= ANOMALY_THRESHOLD;
               const isDown = i.deltaPct != null && i.deltaPct < 0;

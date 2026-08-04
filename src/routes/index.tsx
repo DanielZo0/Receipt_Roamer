@@ -95,7 +95,7 @@ function Index() {
   return (
     <div className="min-h-screen bg-background">
       <AppNav />
-      <main className="max-w-6xl mx-auto px-4 py-8">
+      <main className="max-w-6xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
         <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
           <div>
             <h1 className="text-3xl font-bold">Dashboard</h1>
@@ -126,7 +126,7 @@ function Index() {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
           Totals per association
         </h2>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 mb-8">
           {totals?.associations.length === 0 ? (
             <Card className="p-6 col-span-full text-center">
               <p className="text-muted-foreground mb-3">No associations yet.</p>
@@ -138,7 +138,7 @@ function Index() {
             totals?.associations.map((a) => {
               const sums = totals.byAssoc.get(a.id);
               return (
-                <Card key={a.id} className="p-4">
+                <Card key={a.id} className="p-3 sm:p-4">
                   <h3 className="font-semibold mb-1 truncate">{a.name}</h3>
                   {sums && sums.size > 0 ? (
                     <ul className="text-sm space-y-0.5">
@@ -200,7 +200,7 @@ function Index() {
               const sums = incomeTotals.byAssoc.get(a.id);
               if (!sums || sums.size === 0) return null;
               return (
-                <Card key={a.id} className="p-4">
+                <Card key={a.id} className="p-3 sm:p-4">
                   <h3 className="font-semibold mb-1 truncate">{a.name}</h3>
                   <ul className="text-sm space-y-0.5">
                     {Array.from(sums.entries()).map(([cur, sum]) => (

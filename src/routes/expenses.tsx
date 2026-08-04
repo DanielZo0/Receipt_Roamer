@@ -26,6 +26,7 @@ import { AppNav } from "@/components/AppNav";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Download, Trash2, FileText, ExternalLink, Info } from "lucide-react";
+import { MobileCardList, MobileCard, MobileCardHeader, MobileCardLabel } from "@/components/ui/responsive-table";
 
 export const Route = createFileRoute("/expenses")({
   head: () => ({
@@ -381,7 +382,7 @@ function ExpensesPage() {
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} placeholder="To" />
         </Card>
 
-        <Card className="overflow-x-auto">
+        <Card className="overflow-x-auto hidden md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -531,6 +532,140 @@ function ExpensesPage() {
             </TableBody>
           </Table>
         </Card>
+
+        {isLoading ? (
+          <p className="text-center text-muted-foreground py-8 md:hidden">Loading…</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-center text-muted-foreground py-8 md:hidden">No expenses match.</p>
+        ) : (
+          <MobileCardList>
+            {filtered.map((e) => (
+              <MobileCard key={e.id}>
+                <MobileCardHeader>
+                  <Input
+                    type="date"
+                    defaultValue={e.expense_date ?? ""}
+                    onBlur={(ev) =>
+                      ev.target.value !== (e.expense_date ?? "") &&
+                      update.mutate({ id: e.id, expense_date: ev.target.value || null })
+                    }
+                    className="flex-1"
+                  />
+                  <div className="flex gap-1 flex-shrink-0">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      defaultValue={e.amount ?? ""}
+                      onBlur={(ev) => {
+                        const v = ev.target.value ? Number(ev.target.value) : null;
+                        if (v !== e.amount) update.mutate({ id: e.id, amount: v });
+                      }}
+                      className="w-20"
+                    />
+                    <Input
+                      defaultValue={e.currency ?? ""}
+                      onBlur={(ev) =>
+                        ev.target.value !== (e.currency ?? "") &&
+                        update.mutate({ id: e.id, currency: ev.target.value || null })
+                      }
+                      className="w-14"
+                      placeholder="EUR"
+                    />
+                  </div>
+                </MobileCardHeader>
+
+                <div>
+                  <MobileCardLabel>Supplier</MobileCardLabel>
+                  <Input
+                    defaultValue={e.supplier ?? ""}
+                    onBlur={(ev) =>
+                      ev.target.value !== (e.supplier ?? "") &&
+                      update.mutate({ id: e.id, supplier: ev.target.value || null })
+                    }
+                    className="w-full mt-1 font-medium"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <MobileCardLabel>Category</MobileCardLabel>
+                    <Input
+                      defaultValue={e.category ?? ""}
+                      onBlur={(ev) =>
+                        ev.target.value !== (e.category ?? "") &&
+                        update.mutate({ id: e.id, category: ev.target.value || null })
+                      }
+                      className="w-full mt-1"
+                    />
+                  </div>
+                  <div>
+                    <MobileCardLabel>Reference</MobileCardLabel>
+                    <Input
+                      defaultValue={e.reference_number ?? ""}
+                      onBlur={(ev) =>
+                        ev.target.value !== (e.reference_number ?? "") &&
+                        update.mutate({ id: e.id, reference_number: ev.target.value || null })
+                      }
+                      className="w-full mt-1"
+                      placeholder="Invoice #"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <MobileCardLabel>Association</MobileCardLabel>
+                  <Select
+                    value={e.association_id ?? "none"}
+                    onValueChange={(v) =>
+                      update.mutate({ id: e.id, association_id: v === "none" ? null : v })
+                    }
+                  >
+                    <SelectTrigger className="w-full mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— unassigned —</SelectItem>
+                      {associations?.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center justify-between pt-1 border-t">
+                  <ExtractionDetails
+                    audit={auditByExpense.get(e.id) ?? null}
+                    duplicateExpense={
+                      expenses?.find((x) => x.id === auditByExpense.get(e.id)?.possible_duplicate_of) ?? null
+                    }
+                  />
+                  <div className="flex gap-1">
+                    {e.file_path ? (
+                      <Button size="icon" variant="ghost" onClick={() => openFile(e.file_path)}>
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    ) : (
+                      <Button size="icon" variant="ghost" disabled>
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    )}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        if (confirm("Delete this expense?")) del.mutate(e);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </MobileCard>
+            ))}
+          </MobileCardList>
+        )}
       </main>
     </div>
   );
