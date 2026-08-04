@@ -329,6 +329,29 @@ export async function handleMailgunWebhook(request: Request): Promise<Response> 
   const allowedSenders = new Set(allowed.map((r) => r.email.toLowerCase().trim()));
   if (!allowedSenders.has(sender)) {
     console.log(`[email-inbound] Ignored email from disallowed sender: ${sender}`);
+
+    // TEMP DEBUG: surface disallowed-sender emails in the Upload Logs page so
+    // their subject/body can be inspected (e.g. Gmail forwarding verification
+    // emails). Remove this block once no longer needed.
+    const debugSubject = (form.get("subject") as string | null)?.trim() || "(no subject)";
+    const debugBody =
+      ((form.get("stripped-text") as string | null) || (form.get("body-plain") as string | null) || "").slice(
+        0,
+        5000,
+      );
+    await supabase.from("upload_logs").insert({
+      file_name: `[DEBUG] from ${sender}: ${debugSubject}`,
+      file_size: null,
+      file_mime: null,
+      status: "error",
+      pipeline: "expense",
+      error_message: debugBody || "(no body text found)",
+      input_tokens: null,
+      output_tokens: null,
+      estimated_cost_usd: null,
+      source: "email",
+    } as never);
+
     // Return 200 so Mailgun doesn't retry — we just don't process it
     return new Response("OK", { status: 200 });
   }
