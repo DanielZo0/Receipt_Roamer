@@ -60,6 +60,13 @@ function embeddedCondotrackerId(rel: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
+/**
+ * Rows created at or after `since`. The bound is inclusive on purpose: rows
+ * inserted in the same transaction share an identical created_at, and an
+ * exclusive bound would drop any that fell on the far side of a page boundary.
+ * CondoTracker dedupes on (source_system, source_id), so re-sending a handful
+ * of boundary rows each run is free, whereas skipping one loses it for good.
+ */
 export async function getPendingForCondoTracker(
   since: string,
   limit: number = DEFAULT_LIMIT,
@@ -75,7 +82,7 @@ export async function getPendingForCondoTracker(
       .select(
         "id, amount, currency, supplier, expense_date, category, reference_number, file_path, file_mime, created_at, associations(condotracker_id)",
       )
-      .gt("created_at", since)
+      .gte("created_at", since)
       .order("created_at", { ascending: true })
       .limit(perStream),
     supabaseAdmin
@@ -83,7 +90,7 @@ export async function getPendingForCondoTracker(
       .select(
         "id, amount, currency, payer_name, payment_date, reference_string, match_confidence, match_signals, file_path, file_mime, created_at, associations(condotracker_id), owners(condotracker_id)",
       )
-      .gt("created_at", since)
+      .gte("created_at", since)
       .order("created_at", { ascending: true })
       .limit(perStream),
   ]);
