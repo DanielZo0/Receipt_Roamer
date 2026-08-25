@@ -39,6 +39,11 @@ export default defineConfig(async ({ command, mode }) => {
                 route: "/api/email-inbound",
                 handler: "./server/api/email-inbound.post.ts",
                 method: "POST"
+              },
+              {
+                route: "/api/condotracker-feed",
+                handler: "./server/api/condotracker-feed.get.ts",
+                method: "GET"
               }
             ]
           }),
