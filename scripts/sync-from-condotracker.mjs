@@ -142,7 +142,7 @@ async function main() {
 
     const { rowCount: ownersDeleted } = await dest.query(
       ownerCondotrackerIds.length > 0
-        ? `DELETE FROM public.owners WHERE condotracker_id IS NOT NULL AND condotracker_id != ALL($1::uuid[])`
+        ? `DELETE FROM public.owners WHERE condotracker_id IS NOT NULL AND condotracker_id != ALL($1::text[])`
         : `DELETE FROM public.owners WHERE condotracker_id IS NOT NULL`,
       ownerCondotrackerIds.length > 0 ? [ownerCondotrackerIds] : [],
     );
@@ -151,7 +151,7 @@ async function main() {
     const condoIds = condos.map((c) => c.id);
     const { rowCount: assocDeleted } = await dest.query(
       condoIds.length > 0
-        ? `DELETE FROM public.associations WHERE condotracker_id IS NOT NULL AND condotracker_id != ALL($1::uuid[])`
+        ? `DELETE FROM public.associations WHERE condotracker_id IS NOT NULL AND condotracker_id != ALL($1::text[])`
         : `DELETE FROM public.associations WHERE condotracker_id IS NOT NULL`,
       condoIds.length > 0 ? [condoIds] : [],
     );
