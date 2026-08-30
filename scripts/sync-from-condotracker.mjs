@@ -79,10 +79,9 @@ async function main() {
   try {
     const { rows: condos } = await source.query(`SELECT id, name, address FROM condominiums`);
     const { rows: owners } = await source.query(
-      `SELECT id, "condominiumId" AS condominium_id, name, apartment, email, phone,
-              "idNumber" AS id_number, "vatNumber" AS vat_number,
-              "yearlyContribution" AS yearly_contribution,
-              "contributionPaid" AS contribution_paid, notes
+      `SELECT id, condominium_id, name, apartment, email, phone,
+              id_number, vat_number, yearly_contribution,
+              contribution_paid, notes
        FROM owners`,
     );
 
