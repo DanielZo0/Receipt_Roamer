@@ -44,6 +44,11 @@ export default defineConfig(async ({ command, mode }) => {
                 route: "/api/health",
                 handler: "./server/api/health.get.ts",
                 method: "GET"
+              },
+              {
+                route: "/api/condotracker-feed",
+                handler: "./server/api/condotracker-feed.get.ts",
+                method: "GET"
               }
             ]
           }),
