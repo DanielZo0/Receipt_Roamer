@@ -39,6 +39,11 @@ export default defineConfig(async ({ command, mode }) => {
                 route: "/api/email-inbound",
                 handler: "./server/api/email-inbound.post.ts",
                 method: "POST"
+              },
+              {
+                route: "/api/health",
+                handler: "./server/api/health.get.ts",
+                method: "GET"
               }
             ]
           }),
