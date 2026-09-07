@@ -11,7 +11,15 @@
  * attachment extraction live in src/lib/email-inbound.server.ts.
  */
 import { handleMailgunWebhook } from "../../src/lib/email-inbound.server";
+import { startImapPoller } from "../../src/lib/email-imap-poll.server";
 import { defineEventHandler, readRawBody, getHeaders, getRequestURL, setResponseStatus } from "h3";
+
+// This is currently the only server route module in the app (registered
+// explicitly in vite.config.ts — there's no Nitro plugin/auto-load setup),
+// so it's the one place guaranteed to be evaluated once at server boot.
+// Starting the Yahoo IMAP poller here is a no-op unless YAHOO_IMAP_USER /
+// YAHOO_IMAP_APP_PASSWORD are configured.
+startImapPoller();
 
 export default defineEventHandler(async (event) => {
   // Read raw body bytes so we can reconstruct a standard Request for our handler.
@@ -21,9 +29,7 @@ export default defineEventHandler(async (event) => {
     if (value) headers.set(key, Array.isArray(value) ? value.join(", ") : value);
   }
 
-  const url = new URL(
-    getRequestURL(event).href || `http://localhost/api/email-inbound`,
-  );
+  const url = new URL(getRequestURL(event).href || `http://localhost/api/email-inbound`);
 
   const request = new Request(url, {
     method: "POST",
