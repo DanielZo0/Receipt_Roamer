@@ -16,8 +16,8 @@ import type { Database } from "@/integrations/supabase/types";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const MAX_BYTES = 15 * 1024 * 1024; // 15 MB per attachment
-const ALLOWED_MIME = new Set([
+export const MAX_BYTES = 15 * 1024 * 1024; // 15 MB per attachment
+export const ALLOWED_MIME = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
@@ -30,7 +30,7 @@ const ALLOWED_MIME = new Set([
 
 // ── Supabase client (server-side only) ──────────────────────────────────────
 
-function getSupabase() {
+export function getSupabase() {
   return createClient<Database>(process.env.SUPABASE_URL!, process.env.SUPABASE_PUBLISHABLE_KEY!, {
     auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
   });
@@ -68,14 +68,19 @@ import {
 
 /** Subject line convention to route an inbound email to the income pipeline
  *  instead of the default expense pipeline — e.g. "Income: owner payment". */
-const INCOME_SUBJECT_RE = /\b(income|payment|received)\b/i;
+export const INCOME_SUBJECT_RE = /\b(income|payment|received)\b/i;
 
-async function extractAndSaveAttachment(
+/** How an inbound email reached the app — distinguishes Mailgun-forwarded
+ *  mail from mail pulled directly via IMAP polling in the Upload Logs UI. */
+export type InboundEmailSource = "email" | "imap";
+
+export async function extractAndSaveAttachment(
   supabase: ReturnType<typeof getSupabase>,
   fileName: string,
   mimeType: string,
   fileBuffer: Buffer,
   emailSubject: string | null,
+  source: InboundEmailSource = "email",
 ) {
   const fileSize = fileBuffer.byteLength;
   const fileBase64 = fileBuffer.toString("base64");
@@ -94,7 +99,7 @@ async function extractAndSaveAttachment(
       file_size: fileSize,
       file_mime: mimeType,
       status: "processing",
-      source: "email",
+      source,
     } as never)
     .select()
     .single();
@@ -148,11 +153,12 @@ async function extractAndSaveAttachment(
   }
 }
 
-async function extractAndSaveIncomeAttachment(
+export async function extractAndSaveIncomeAttachment(
   supabase: ReturnType<typeof getSupabase>,
   fileName: string,
   mimeType: string,
   fileBuffer: Buffer,
+  source: InboundEmailSource = "email",
 ) {
   const fileSize = fileBuffer.byteLength;
   const fileBase64 = fileBuffer.toString("base64");
@@ -171,7 +177,7 @@ async function extractAndSaveIncomeAttachment(
       file_mime: mimeType,
       status: "processing",
       pipeline: "income",
-      source: "email",
+      source,
     } as never)
     .select()
     .single();
@@ -224,10 +230,11 @@ async function extractAndSaveIncomeAttachment(
 /** Handles an "income"/"payment" email that has no usable attachment, by
  *  reading the payment details straight out of the forwarded email's plain
  *  text body (e.g. a forwarded Wise "Money received" notification). */
-async function extractAndSaveIncomeFromText(
+export async function extractAndSaveIncomeFromText(
   supabase: ReturnType<typeof getSupabase>,
   subject: string | null,
   emailBodyText: string,
+  source: InboundEmailSource = "email",
 ) {
   const logName = subject ?? "(no subject)";
 
@@ -239,7 +246,7 @@ async function extractAndSaveIncomeFromText(
       file_mime: "text/plain",
       status: "processing",
       pipeline: "income",
-      source: "email",
+      source,
     } as never)
     .select()
     .single();
@@ -286,10 +293,11 @@ async function extractAndSaveIncomeFromText(
 /** Handles a (non-income) email that has no usable attachment, by reading
  *  the payment details straight out of the forwarded email's plain text
  *  body (e.g. a forwarded Wise "Transfer sent" outgoing-payment notification). */
-async function extractAndSaveExpenseFromText(
+export async function extractAndSaveExpenseFromText(
   supabase: ReturnType<typeof getSupabase>,
   subject: string | null,
   emailBodyText: string,
+  source: InboundEmailSource = "email",
 ) {
   const logName = subject ?? "(no subject)";
 
@@ -301,7 +309,7 @@ async function extractAndSaveExpenseFromText(
       file_mime: "text/plain",
       status: "processing",
       pipeline: "expense",
-      source: "email",
+      source,
     } as never)
     .select()
     .single();
@@ -311,10 +319,12 @@ async function extractAndSaveExpenseFromText(
   const uploadLogId = (logRow as { id?: string } | null)?.id;
 
   try {
-    const { expense, inputTokens, outputTokens, estimatedCostUsd } = await runExtractionPipelineFromText(
-      supabase,
-      { emailBodyText, emailSubject: subject, uploadLogId },
-    );
+    const { expense, inputTokens, outputTokens, estimatedCostUsd } =
+      await runExtractionPipelineFromText(supabase, {
+        emailBodyText,
+        emailSubject: subject,
+        uploadLogId,
+      });
 
     if (uploadLogId) {
       await supabase
@@ -382,10 +392,15 @@ export async function handleMailgunWebhook(request: Request): Promise<Response> 
   const supabase = getSupabase();
   const sender = (form.get("sender") as string | null)?.toLowerCase().trim() ?? "";
 
-  const { data: allowed, error: allowedErr } = await supabase.from("allowed_sender_emails").select("email");
+  const { data: allowed, error: allowedErr } = await supabase
+    .from("allowed_sender_emails")
+    .select("email");
 
   if (allowedErr || !allowed || allowed.length === 0) {
-    console.error("[email-inbound] Could not load allowed senders — rejecting (fail closed)", allowedErr);
+    console.error(
+      "[email-inbound] Could not load allowed senders — rejecting (fail closed)",
+      allowedErr,
+    );
     // Return 200 so Mailgun doesn't retry — we just don't process it
     return new Response("OK", { status: 200 });
   }
@@ -393,29 +408,6 @@ export async function handleMailgunWebhook(request: Request): Promise<Response> 
   const allowedSenders = new Set(allowed.map((r) => r.email.toLowerCase().trim()));
   if (!allowedSenders.has(sender)) {
     console.log(`[email-inbound] Ignored email from disallowed sender: ${sender}`);
-
-    // TEMP DEBUG: surface disallowed-sender emails in the Upload Logs page so
-    // their subject/body can be inspected (e.g. Gmail forwarding verification
-    // emails). Remove this block once no longer needed.
-    const debugSubject = (form.get("subject") as string | null)?.trim() || "(no subject)";
-    const debugBody =
-      ((form.get("stripped-text") as string | null) || (form.get("body-plain") as string | null) || "").slice(
-        0,
-        5000,
-      );
-    await supabase.from("upload_logs").insert({
-      file_name: `[DEBUG] from ${sender}: ${debugSubject}`,
-      file_size: null,
-      file_mime: null,
-      status: "error",
-      pipeline: "expense",
-      error_message: debugBody || "(no body text found)",
-      input_tokens: null,
-      output_tokens: null,
-      estimated_cost_usd: null,
-      source: "email",
-    } as never);
-
     // Return 200 so Mailgun doesn't retry — we just don't process it
     return new Response("OK", { status: 200 });
   }
