@@ -24,7 +24,7 @@ import {
   extractAndSaveExpenseFromText,
 } from "@/lib/email-inbound.server";
 
-const DEFAULT_POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const DEFAULT_POLL_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1 day
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
