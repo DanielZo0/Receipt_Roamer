@@ -1,5 +1,5 @@
 import { RULES } from "./rules";
-import { matchLearnedRule, type AssociationRuleRow } from "./learned-rules";
+import { evaluateRules, type RuleEvaluationTarget, type RuleRow } from "./rule-engine";
 
 export interface AssociationRow {
   id: string;
@@ -56,9 +56,7 @@ export function matchAssociation(
     }
 
     // ─── KEYWORD MATCH ────────────────────────────────────────────────
-    const keywordMatches = assoc.keywords.filter((kw) =>
-      supplierLower.includes(kw.toLowerCase()),
-    );
+    const keywordMatches = assoc.keywords.filter((kw) => supplierLower.includes(kw.toLowerCase()));
     if (keywordMatches.length > 0) {
       signals.push(`keyword_match(${keywordMatches.join(",")})`);
       const keywordScore = Math.min(
@@ -129,25 +127,25 @@ export function shouldLLMRecheckAssociation(confidence: number): boolean {
 
 /**
  * Combines heuristic keyword/exact-name matching (matchAssociation above)
- * with learned rules from prior user corrections. A learned-rule hit is
- * treated as certain (confidence 1.0) and takes priority over the heuristic
- * match.
+ * with user-defined automation rules (src/lib/extraction/rule-engine.ts). A
+ * rule hit is treated as certain (confidence 1.0) and takes priority over
+ * the heuristic match.
  */
-export function matchAssociationWithLearnedRules(
-  supplier: string | null,
+export function matchAssociationWithRules(
+  target: RuleEvaluationTarget,
   associations: AssociationRow[],
-  learnedRules: AssociationRuleRow[],
+  rules: RuleRow[],
 ): AssociationMatchResult {
-  const learned = matchLearnedRule(supplier, learnedRules);
-  if (learned.association_id) {
-    const assoc = associations.find((a) => a.id === learned.association_id);
+  const { actions, matchedRuleIds } = evaluateRules(target, rules);
+  if (actions.associationId) {
+    const assoc = associations.find((a) => a.id === actions.associationId);
     return {
-      association_id: learned.association_id,
+      association_id: actions.associationId,
       association_name: assoc?.name ?? null,
       confidence: 1.0,
-      reasons: [`Matched learned rule: "${learned.matched_pattern}"`],
-      matched_by: [`learned_rule(${learned.matched_pattern})`],
+      reasons: [`Matched rule(s): ${matchedRuleIds.join(", ")}`],
+      matched_by: matchedRuleIds.map((id) => `rule(${id})`),
     };
   }
-  return matchAssociation({ supplier }, associations);
+  return matchAssociation({ supplier: target.supplier }, associations);
 }

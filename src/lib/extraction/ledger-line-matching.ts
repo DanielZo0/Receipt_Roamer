@@ -1,33 +1,36 @@
-import { matchAssociationWithLearnedRules } from "./association-matching";
+import { matchAssociationWithRules } from "./association-matching";
 import type { AssociationRow, AssociationMatchResult } from "./association-matching";
-import type { AssociationRuleRow } from "./learned-rules";
-import { matchLearnedCategoryRule, type CategoryRuleRow } from "./learned-category-rules";
+import { evaluateRules, type RuleEvaluationTarget, type RuleRow } from "./rule-engine";
 
 export interface LineItemMatchResult {
   associationMatch: AssociationMatchResult;
   category: string | null;
+  needsReview: boolean;
+  notifyRuleIds: string[];
+  matchedRuleIds: string[];
 }
 
 /**
- * Runs the same rule-based association + learned-category matching used for
- * whole documents (Phase 3 of the pipeline), but against a single ledger
- * line item's own supplier/property-name text.
+ * Runs the same rule-based association + category matching used for whole
+ * documents (Phase 3 of the pipeline), but against a single ledger line
+ * item's own supplier/property-name text.
  */
 export function matchLineItem(
-  supplierText: string | null,
+  target: RuleEvaluationTarget,
   associations: AssociationRow[],
-  learnedAssociationRules: AssociationRuleRow[],
-  learnedCategoryRules: CategoryRuleRow[],
+  rules: RuleRow[],
   fallbackCategory: string | null,
 ): LineItemMatchResult {
-  const associationMatch = matchAssociationWithLearnedRules(
-    supplierText,
-    associations,
-    learnedAssociationRules,
-  );
+  const associationMatch = matchAssociationWithRules(target, associations, rules);
 
-  const learnedCategoryMatch = matchLearnedCategoryRule(supplierText, learnedCategoryRules);
-  const category = learnedCategoryMatch.category ?? fallbackCategory;
+  const { actions, matchedRuleIds } = evaluateRules(target, rules);
+  const category = actions.category ?? fallbackCategory;
 
-  return { associationMatch, category };
+  return {
+    associationMatch,
+    category,
+    needsReview: actions.needsReview,
+    notifyRuleIds: actions.notifyRuleIds,
+    matchedRuleIds,
+  };
 }

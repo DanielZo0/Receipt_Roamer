@@ -90,6 +90,7 @@ export type Database = {
           file_path: string | null;
           id: string;
           ledger_group_id: string | null;
+          needs_review: boolean;
           raw_extraction: Json | null;
           reference_number: string | null;
           source_line_index: number | null;
@@ -107,6 +108,7 @@ export type Database = {
           file_path?: string | null;
           id?: string;
           ledger_group_id?: string | null;
+          needs_review?: boolean;
           raw_extraction?: Json | null;
           reference_number?: string | null;
           source_line_index?: number | null;
@@ -124,6 +126,7 @@ export type Database = {
           file_path?: string | null;
           id?: string;
           ledger_group_id?: string | null;
+          needs_review?: boolean;
           raw_extraction?: Json | null;
           reference_number?: string | null;
           source_line_index?: number | null;
@@ -467,41 +470,43 @@ export type Database = {
           },
         ];
       };
-      association_rules: {
+      rules: {
         Row: {
           id: string;
-          supplier_pattern: string;
-          association_id: string;
-          source_expense_id: string | null;
+          name: string | null;
           active: boolean;
+          priority: number;
+          conditions: Json;
+          actions: Json;
+          source_expense_id: string | null;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
-          supplier_pattern: string;
-          association_id: string;
-          source_expense_id?: string | null;
+          name?: string | null;
           active?: boolean;
+          priority?: number;
+          conditions: Json;
+          actions: Json;
+          source_expense_id?: string | null;
           created_at?: string;
+          updated_at?: string;
         };
         Update: {
           id?: string;
-          supplier_pattern?: string;
-          association_id?: string;
-          source_expense_id?: string | null;
+          name?: string | null;
           active?: boolean;
+          priority?: number;
+          conditions?: Json;
+          actions?: Json;
+          source_expense_id?: string | null;
           created_at?: string;
+          updated_at?: string;
         };
         Relationships: [
           {
-            foreignKeyName: "association_rules_association_id_fkey";
-            columns: ["association_id"];
-            isOneToOne: false;
-            referencedRelation: "associations";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "association_rules_source_expense_id_fkey";
+            foreignKeyName: "rules_source_expense_id_fkey";
             columns: ["source_expense_id"];
             isOneToOne: false;
             referencedRelation: "expenses";
@@ -509,35 +514,42 @@ export type Database = {
           },
         ];
       };
-      category_rules: {
+      rule_notifications: {
         Row: {
           id: string;
-          supplier_pattern: string;
-          category: string;
-          source_expense_id: string | null;
-          active: boolean;
+          rule_id: string | null;
+          expense_id: string | null;
+          message: string;
+          read: boolean;
           created_at: string;
         };
         Insert: {
           id?: string;
-          supplier_pattern: string;
-          category: string;
-          source_expense_id?: string | null;
-          active?: boolean;
+          rule_id?: string | null;
+          expense_id?: string | null;
+          message: string;
+          read?: boolean;
           created_at?: string;
         };
         Update: {
           id?: string;
-          supplier_pattern?: string;
-          category?: string;
-          source_expense_id?: string | null;
-          active?: boolean;
+          rule_id?: string | null;
+          expense_id?: string | null;
+          message?: string;
+          read?: boolean;
           created_at?: string;
         };
         Relationships: [
           {
-            foreignKeyName: "category_rules_source_expense_id_fkey";
-            columns: ["source_expense_id"];
+            foreignKeyName: "rule_notifications_rule_id_fkey";
+            columns: ["rule_id"];
+            isOneToOne: false;
+            referencedRelation: "rules";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "rule_notifications_expense_id_fkey";
+            columns: ["expense_id"];
             isOneToOne: false;
             referencedRelation: "expenses";
             referencedColumns: ["id"];

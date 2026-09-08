@@ -26,7 +26,12 @@ import { AppNav } from "@/components/AppNav";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Download, Trash2, FileText, ExternalLink, Info } from "lucide-react";
-import { MobileCardList, MobileCard, MobileCardHeader, MobileCardLabel } from "@/components/ui/responsive-table";
+import {
+  MobileCardList,
+  MobileCard,
+  MobileCardHeader,
+  MobileCardLabel,
+} from "@/components/ui/responsive-table";
 
 export const Route = createFileRoute("/expenses")({
   head: () => ({
@@ -64,7 +69,12 @@ type ExpenseRow = {
   created_at: string;
 };
 
-type ValidationIssue = { field: string; value: unknown; reason: string; severity: "error" | "warning" };
+type ValidationIssue = {
+  field: string;
+  value: unknown;
+  reason: string;
+  severity: "error" | "warning";
+};
 
 type AuditLogRow = {
   expense_id: string;
@@ -83,10 +93,7 @@ function ExpensesPage() {
   const { data: associations } = useQuery({
     queryKey: ["associations"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("associations")
-        .select("id,name")
-        .order("name");
+      const { data, error } = await supabase.from("associations").select("id,name").order("name");
       if (error) throw error;
       return data as { id: string; name: string }[];
     },
@@ -142,7 +149,8 @@ function ExpensesPage() {
       if (from && (!e.expense_date || e.expense_date < from)) return false;
       if (to && (!e.expense_date || e.expense_date > to)) return false;
       if (q) {
-        const s = `${e.supplier ?? ""} ${e.category ?? ""} ${e.reference_number ?? ""}`.toLowerCase();
+        const s =
+          `${e.supplier ?? ""} ${e.category ?? ""} ${e.reference_number ?? ""}`.toLowerCase();
         if (!s.includes(q)) return false;
       }
       return true;
@@ -150,7 +158,7 @@ function ExpensesPage() {
   }, [expenses, search, assocFilter, from, to]);
 
   const assocName = (id: string | null) =>
-    id ? associations?.find((a) => a.id === id)?.name ?? "—" : "—";
+    id ? (associations?.find((a) => a.id === id)?.name ?? "—") : "—";
 
   const update = useMutation({
     mutationFn: async (row: Partial<ExpenseRow> & { id: string }) => {
@@ -190,24 +198,29 @@ function ExpensesPage() {
       ) {
         const supplier = original.supplier;
         const associationId = rest.association_id as string;
-        const associationName = associations?.find((a) => a.id === associationId)?.name ?? "this association";
+        const associationName =
+          associations?.find((a) => a.id === associationId)?.name ?? "this association";
         const pattern = supplier.toLowerCase().trim();
         const matchCount =
-          expenses?.filter((e) => e.id !== original.id && e.supplier?.toLowerCase().includes(pattern)).length ?? 0;
+          expenses?.filter(
+            (e) => e.id !== original.id && e.supplier?.toLowerCase().includes(pattern),
+          ).length ?? 0;
 
         toast(`Always match "${supplier}" to ${associationName}?`, {
-          description: matchCount > 0 ? `Also matches ${matchCount} other expense${matchCount === 1 ? "" : "s"}.` : undefined,
+          description:
+            matchCount > 0
+              ? `Also matches ${matchCount} other expense${matchCount === 1 ? "" : "s"}.`
+              : undefined,
           action: {
             label: "Save rule",
             onClick: async () => {
-              const { error } = await supabase.from("association_rules").insert({
-                supplier_pattern: pattern,
-                association_id: associationId,
+              const { error } = await supabase.from("rules").insert({
+                conditions: [{ field: "supplier", operator: "contains", value: pattern }] as never,
+                actions: [{ type: "set_association", value: associationId }] as never,
                 source_expense_id: original.id,
               });
               if (error) {
-                // Unique constraint violation just means the rule already exists.
-                if (error.code !== "23505") toast.error(error.message);
+                toast.error(error.message);
               } else {
                 toast.success("Rule saved");
               }
@@ -228,20 +241,25 @@ function ExpensesPage() {
         const category = rest.category as string;
         const pattern = supplier.toLowerCase().trim();
         const matchCount =
-          expenses?.filter((e) => e.id !== original.id && e.supplier?.toLowerCase().includes(pattern)).length ?? 0;
+          expenses?.filter(
+            (e) => e.id !== original.id && e.supplier?.toLowerCase().includes(pattern),
+          ).length ?? 0;
 
         toast(`Always categorize "${supplier}" as ${category}?`, {
-          description: matchCount > 0 ? `Also matches ${matchCount} other expense${matchCount === 1 ? "" : "s"}.` : undefined,
+          description:
+            matchCount > 0
+              ? `Also matches ${matchCount} other expense${matchCount === 1 ? "" : "s"}.`
+              : undefined,
           action: {
             label: "Save rule",
             onClick: async () => {
-              const { error } = await supabase.from("category_rules").insert({
-                supplier_pattern: pattern,
-                category,
+              const { error } = await supabase.from("rules").insert({
+                conditions: [{ field: "supplier", operator: "contains", value: pattern }] as never,
+                actions: [{ type: "set_category", value: category }] as never,
                 source_expense_id: original.id,
               });
               if (error) {
-                if (error.code !== "23505") toast.error(error.message);
+                toast.error(error.message);
               } else {
                 toast.success("Rule saved");
               }
@@ -298,7 +316,15 @@ function ExpensesPage() {
       toast.info("Nothing new to export");
       return;
     }
-    const headers = ["Date", "Supplier", "Amount", "Currency", "Category", "Reference", "Association"];
+    const headers = [
+      "Date",
+      "Supplier",
+      "Amount",
+      "Currency",
+      "Category",
+      "Reference",
+      "Association",
+    ];
     const rows = toExport.map((e) => [
       e.expense_date ? formatIsoDateDmy(e.expense_date) : "",
       e.supplier ?? "",
@@ -326,9 +352,7 @@ function ExpensesPage() {
 
   async function openFile(path: string | null) {
     if (!path) return;
-    const { data, error } = await supabase.storage
-      .from("receipts")
-      .createSignedUrl(path, 60 * 5);
+    const { data, error } = await supabase.storage.from("receipts").createSignedUrl(path, 60 * 5);
     if (error || !data?.signedUrl) {
       toast.error("Could not open file");
       return;
@@ -344,14 +368,19 @@ function ExpensesPage() {
           <h1 className="text-2xl font-bold">Expenses</h1>
           <div className="flex items-center gap-3 flex-wrap">
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Checkbox checked={exportNewOnly} onCheckedChange={(v) => setExportNewOnly(v === true)} />
+              <Checkbox
+                checked={exportNewOnly}
+                onCheckedChange={(v) => setExportNewOnly(v === true)}
+              />
               Only new (not yet exported)
             </label>
             {!exportNewOnly && filtered.some((e) => e.exported_at) && (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => resetExported.mutate(filtered.filter((e) => e.exported_at).map((e) => e.id))}
+                onClick={() =>
+                  resetExported.mutate(filtered.filter((e) => e.exported_at).map((e) => e.id))
+                }
               >
                 Reset export status
               </Button>
@@ -363,7 +392,11 @@ function ExpensesPage() {
         </div>
 
         <Card className="p-4 mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Input placeholder="Search supplier / category / reference" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input
+            placeholder="Search supplier / category / reference"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
           <Select value={assocFilter} onValueChange={setAssocFilter}>
             <SelectTrigger>
               <SelectValue placeholder="Association" />
@@ -378,7 +411,12 @@ function ExpensesPage() {
               ))}
             </SelectContent>
           </Select>
-          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="From" />
+          <Input
+            type="date"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            placeholder="From"
+          />
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} placeholder="To" />
         </Card>
 
@@ -511,7 +549,9 @@ function ExpensesPage() {
                       <ExtractionDetails
                         audit={auditByExpense.get(e.id) ?? null}
                         duplicateExpense={
-                          expenses?.find((x) => x.id === auditByExpense.get(e.id)?.possible_duplicate_of) ?? null
+                          expenses?.find(
+                            (x) => x.id === auditByExpense.get(e.id)?.possible_duplicate_of,
+                          ) ?? null
                         }
                       />
                     </TableCell>
@@ -638,7 +678,9 @@ function ExpensesPage() {
                   <ExtractionDetails
                     audit={auditByExpense.get(e.id) ?? null}
                     duplicateExpense={
-                      expenses?.find((x) => x.id === auditByExpense.get(e.id)?.possible_duplicate_of) ?? null
+                      expenses?.find(
+                        (x) => x.id === auditByExpense.get(e.id)?.possible_duplicate_of,
+                      ) ?? null
                     }
                   />
                   <div className="flex gap-1">
@@ -703,18 +745,27 @@ function ExtractionDetails({
           {isDuplicate && <Badge variant="destructive">Possible duplicate</Badge>}
           {rechecked && <Badge variant="secondary">Re-checked by LLM</Badge>}
           {confidence != null && (
-            <Badge variant="outline">
-              Association match: {(confidence * 100).toFixed(0)}%
+            <Badge variant="outline">Association match: {(confidence * 100).toFixed(0)}%</Badge>
+          )}
+          {errorCount > 0 && (
+            <Badge variant="destructive">
+              {errorCount} error{errorCount === 1 ? "" : "s"}
             </Badge>
           )}
-          {errorCount > 0 && <Badge variant="destructive">{errorCount} error{errorCount === 1 ? "" : "s"}</Badge>}
-          {warningCount > 0 && <Badge variant="secondary">{warningCount} warning{warningCount === 1 ? "" : "s"}</Badge>}
+          {warningCount > 0 && (
+            <Badge variant="secondary">
+              {warningCount} warning{warningCount === 1 ? "" : "s"}
+            </Badge>
+          )}
         </div>
 
         {isDuplicate && (
           <p className="text-xs text-muted-foreground">
             Matches an existing expense
-            {duplicateExpense ? ` from ${duplicateExpense.expense_date ?? "an unknown date"} (${duplicateExpense.supplier ?? "same supplier"})` : ""}.
+            {duplicateExpense
+              ? ` from ${duplicateExpense.expense_date ?? "an unknown date"} (${duplicateExpense.supplier ?? "same supplier"})`
+              : ""}
+            .
           </p>
         )}
 
@@ -724,15 +775,18 @@ function ExtractionDetails({
           </p>
         )}
 
-        {audit.extraction_reasoning && (
-          <p className="text-xs">{audit.extraction_reasoning}</p>
-        )}
+        {audit.extraction_reasoning && <p className="text-xs">{audit.extraction_reasoning}</p>}
 
         {(errorCount > 0 || warningCount > 0) && (
           <ul className="text-xs space-y-0.5 border-t pt-1.5">
             {[...(audit.validation_errors ?? []), ...(audit.validation_warnings ?? [])].map(
               (issue, i) => (
-                <li key={i} className={issue.severity === "error" ? "text-destructive" : "text-muted-foreground"}>
+                <li
+                  key={i}
+                  className={
+                    issue.severity === "error" ? "text-destructive" : "text-muted-foreground"
+                  }
+                >
                   {issue.field}: {issue.reason}
                 </li>
               ),
