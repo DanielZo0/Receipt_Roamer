@@ -25,13 +25,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 const linkBase =
@@ -40,7 +34,11 @@ const activeClass = "bg-accent text-foreground";
 
 type NavItem = { to: string; label: string; icon: React.ComponentType<{ className?: string }> };
 
-const GROUPS: { label: string; icon: React.ComponentType<{ className?: string }>; items: NavItem[] }[] = [
+const GROUPS: {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  items: NavItem[];
+}[] = [
   {
     label: "Money",
     icon: Wallet,
@@ -63,7 +61,7 @@ const GROUPS: { label: string; icon: React.ComponentType<{ className?: string }>
     icon: History,
     items: [
       { to: "/upload-logs", label: "Logs", icon: ScrollText },
-      { to: "/rules", label: "Rules", icon: Sparkles },
+      { to: "/rules", label: "Automations", icon: Sparkles },
       { to: "/corrections", label: "Corrections", icon: History },
       { to: "/insights", label: "Insights", icon: LineChart },
     ],
@@ -123,7 +121,10 @@ export function AppNav() {
                         <DropdownMenuItem key={item.to} asChild>
                           <Link
                             to={item.to}
-                            className={cn("flex items-center gap-2 w-full", itemActive && "font-semibold")}
+                            className={cn(
+                              "flex items-center gap-2 w-full",
+                              itemActive && "font-semibold",
+                            )}
                           >
                             <ItemIcon className="h-4 w-4" /> {item.label}
                           </Link>
