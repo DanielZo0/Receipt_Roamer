@@ -32,6 +32,10 @@ export interface RunExtractionPipelineParams {
    *  fallback to identify the condominium when the receipt image itself
    *  doesn't name it. */
   emailSubject?: string | null;
+  /** The inbound email address the receipt was sent from (checked against
+   *  allowed_sender_emails upstream) — available as a rule condition. Null
+   *  for manual uploads. */
+  senderEmail?: string | null;
   /** id of the upload_logs row already inserted (status: 'processing') for
    *  this attempt — used to record retry progress and honor cancellation. */
   uploadLogId?: string | null;
@@ -42,6 +46,9 @@ export interface RunExtractionPipelineFromTextParams {
   /** Email subject line — used as a fallback to identify the condominium
    *  when the body text itself doesn't name it. */
   emailSubject?: string | null;
+  /** The inbound email address the receipt was sent from — available as a
+   *  rule condition. */
+  senderEmail?: string | null;
   uploadLogId?: string | null;
 }
 
@@ -131,6 +138,7 @@ export async function runExtractionPipeline(
       category: extracted.category,
       currency: extracted.currency,
       association_id: extracted.association_id,
+      sender_email: params.senderEmail ?? null,
     },
     associations,
     rules,
@@ -164,6 +172,7 @@ export async function runExtractionPipeline(
         category: extracted.category,
         currency: extracted.currency,
         association_id: extracted.association_id,
+        sender_email: params.senderEmail ?? null,
       },
       associations,
       rules,
@@ -206,6 +215,7 @@ export async function runExtractionPipeline(
       category,
       currency: extracted.currency,
       association_id: finalAssociationId,
+      sender_email: params.senderEmail ?? null,
     },
     rules,
   );
@@ -326,6 +336,7 @@ export async function runExtractionPipelineFromText(
       category: extracted.category,
       currency: extracted.currency,
       association_id: extracted.association_id,
+      sender_email: params.senderEmail ?? null,
     },
     associations,
     rules,
@@ -365,6 +376,7 @@ export async function runExtractionPipelineFromText(
       category,
       currency: extracted.currency,
       association_id: finalAssociationId,
+      sender_email: params.senderEmail ?? null,
     },
     rules,
   );
@@ -482,6 +494,7 @@ async function runLedgerBranch(
         category: null,
         currency,
         association_id: null,
+        sender_email: params.senderEmail ?? null,
       },
       associations,
       rules,

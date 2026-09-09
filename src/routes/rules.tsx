@@ -57,6 +57,7 @@ const FIELD_OPTIONS: { value: RuleField; label: string; kind: "text" | "number" 
   { value: "category", label: "Category", kind: "text" },
   { value: "currency", label: "Currency", kind: "text" },
   { value: "association_id", label: "Association", kind: "text" },
+  { value: "sender_email", label: "Sender email", kind: "text" },
 ];
 
 const TEXT_OPERATORS: { value: RuleOperator; label: string }[] = [
@@ -102,6 +103,18 @@ function RulesPage() {
       const { data, error } = await supabase.from("categories").select("name").order("name");
       if (error) throw error;
       return (data ?? []).map((c) => c.name) as string[];
+    },
+  });
+
+  const { data: senderEmails } = useQuery({
+    queryKey: ["allowed-sender-emails"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("allowed_sender_emails")
+        .select("email")
+        .order("email");
+      if (error) throw error;
+      return (data ?? []).map((r) => r.email) as string[];
     },
   });
 
@@ -224,6 +237,7 @@ function RulesPage() {
           <RuleEditCard
             associations={associations ?? []}
             categories={categories ?? []}
+            senderEmails={senderEmails ?? []}
             onCancel={() => setAdding(false)}
             onSave={(row) => upsert.mutate(row)}
             saving={upsert.isPending}
@@ -247,6 +261,7 @@ function RulesPage() {
                     initial={r}
                     associations={associations ?? []}
                     categories={categories ?? []}
+                    senderEmails={senderEmails ?? []}
                     onCancel={() => setEditingId(null)}
                     onSave={(row) => upsert.mutate({ ...row, id: r.id })}
                     saving={upsert.isPending}
@@ -364,6 +379,7 @@ function RuleEditCard({
   initial,
   associations,
   categories,
+  senderEmails,
   onSave,
   onCancel,
   saving,
@@ -371,6 +387,7 @@ function RuleEditCard({
   initial?: RuleRow;
   associations: Association[];
   categories: string[];
+  senderEmails: string[];
   onSave: (row: {
     name: string | null;
     conditions: RuleCondition[];
@@ -465,6 +482,22 @@ function RuleEditCard({
                     {associations.map((a) => (
                       <SelectItem key={a.id} value={a.id}>
                         {a.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : c.field === "sender_email" ? (
+                <Select
+                  value={String(c.value)}
+                  onValueChange={(v) => updateCondition(i, { value: v })}
+                >
+                  <SelectTrigger className="w-52">
+                    <SelectValue placeholder="Sender email" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {senderEmails.map((email) => (
+                      <SelectItem key={email} value={email}>
+                        {email}
                       </SelectItem>
                     ))}
                   </SelectContent>

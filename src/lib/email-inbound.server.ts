@@ -80,6 +80,7 @@ export async function extractAndSaveAttachment(
   mimeType: string,
   fileBuffer: Buffer,
   emailSubject: string | null,
+  senderEmail: string | null = null,
   source: InboundEmailSource = "email",
 ) {
   const fileSize = fileBuffer.byteLength;
@@ -118,6 +119,7 @@ export async function extractAndSaveAttachment(
         filePath: storagePath,
         fileSize,
         emailSubject,
+        senderEmail,
         uploadLogId,
       },
     );
@@ -297,6 +299,7 @@ export async function extractAndSaveExpenseFromText(
   supabase: ReturnType<typeof getSupabase>,
   subject: string | null,
   emailBodyText: string,
+  senderEmail: string | null = null,
   source: InboundEmailSource = "email",
 ) {
   const logName = subject ?? "(no subject)";
@@ -323,6 +326,7 @@ export async function extractAndSaveExpenseFromText(
       await runExtractionPipelineFromText(supabase, {
         emailBodyText,
         emailSubject: subject,
+        senderEmail,
         uploadLogId,
       });
 
@@ -465,7 +469,7 @@ export async function handleMailgunWebhook(request: Request): Promise<Response> 
 
     if (bodyText) {
       console.log("[email-inbound] No attachment — extracting expense from email body text");
-      await extractAndSaveExpenseFromText(supabase, subject, bodyText);
+      await extractAndSaveExpenseFromText(supabase, subject, bodyText, sender);
       return new Response("OK", { status: 200 });
     }
 
@@ -496,7 +500,7 @@ export async function handleMailgunWebhook(request: Request): Promise<Response> 
     attachments.map((att) =>
       (isIncome
         ? extractAndSaveIncomeAttachment(supabase, att.name, att.mime, att.buffer)
-        : extractAndSaveAttachment(supabase, att.name, att.mime, att.buffer, subject)
+        : extractAndSaveAttachment(supabase, att.name, att.mime, att.buffer, subject, sender)
       ).catch((err) => console.error(`[email-inbound] Failed to process "${att.name}":`, err)),
     ),
   );
