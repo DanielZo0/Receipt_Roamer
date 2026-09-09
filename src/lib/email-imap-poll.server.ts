@@ -157,7 +157,10 @@ async function pollOnce(host: string, user: string, pass: string) {
         }
 
         if (uidNext - 1 <= storedLastUid) {
-          return; // nothing new since last cycle
+          console.log(
+            `[imap-poll] Cycle complete for ${mailbox} — nothing new (watermark: UID ${storedLastUid})`,
+          );
+          return;
         }
 
         const { data: allowed, error: allowedErr } = await supabase
@@ -177,6 +180,9 @@ async function pollOnce(host: string, user: string, pass: string) {
         const uids = await client.search({ uid: `${storedLastUid + 1}:*` }, { uid: true });
         if (!uids || uids.length === 0) {
           await setLastUid(supabase, mailbox, uidNext - 1);
+          console.log(
+            `[imap-poll] Cycle complete for ${mailbox} — search returned no new messages`,
+          );
           return;
         }
 
