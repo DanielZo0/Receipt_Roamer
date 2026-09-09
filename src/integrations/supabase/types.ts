@@ -556,6 +556,24 @@ export type Database = {
           },
         ];
       };
+      imap_poll_state: {
+        Row: {
+          mailbox: string;
+          last_uid: number;
+          updated_at: string;
+        };
+        Insert: {
+          mailbox: string;
+          last_uid: number;
+          updated_at?: string;
+        };
+        Update: {
+          mailbox?: string;
+          last_uid?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
