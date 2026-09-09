@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { getStoredTheme, setStoredTheme, resolveTheme, THEME_STORAGE_KEY } from "./theme";
 
 describe("getStoredTheme / setStoredTheme", () => {
@@ -19,6 +19,22 @@ describe("getStoredTheme / setStoredTheme", () => {
   it("falls back to 'system' for a corrupted stored value", () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, "not-a-real-theme");
     expect(getStoredTheme()).toBe("system");
+  });
+
+  it("falls back to 'system' when localStorage.getItem throws", () => {
+    const spy = vi.spyOn(window.localStorage, "getItem").mockImplementation(() => {
+      throw new Error("storage disabled");
+    });
+    expect(getStoredTheme()).toBe("system");
+    spy.mockRestore();
+  });
+
+  it("silently no-ops when localStorage.setItem throws", () => {
+    const spy = vi.spyOn(window.localStorage, "setItem").mockImplementation(() => {
+      throw new Error("storage disabled");
+    });
+    expect(() => setStoredTheme("dark")).not.toThrow();
+    spy.mockRestore();
   });
 });
 
