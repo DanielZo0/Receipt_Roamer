@@ -39,6 +39,17 @@ const DEFAULT_POLL_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1 day
 // batch at a time on subsequent cycles instead of hammering the IMAP server.
 const MAX_MESSAGES_PER_CYCLE = 50;
 
+// Hard ceiling on a single poll cycle. imapflow's own connect/greeting/socket
+// timeouts should normally catch a dead connection, but a network path that
+// silently blackholes packets (rather than resetting the connection) can slip
+// past those and hang forever with zero log output. This watchdog forces the
+// connection closed so the process never gets stuck and always logs *something*.
+const CYCLE_WATCHDOG_MS = 3 * 60 * 1000; // 3 minutes
+
+// getMailboxLock has no default acquire timeout at all (per imapflow's docs),
+// so it's set explicitly here as a second line of defense.
+const LOCK_ACQUIRE_TIMEOUT_MS = 30 * 1000;
+
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Starts the IMAP poll loop once per server process. No-op if already
@@ -112,81 +123,94 @@ async function pollOnce(host: string, user: string, pass: string) {
     logger: false,
   });
 
-  await client.connect();
+  const watchdog = setTimeout(() => {
+    console.error(
+      `[imap-poll] Cycle exceeded ${CYCLE_WATCHDOG_MS}ms watchdog — forcing connection closed`,
+    );
+    client.close();
+  }, CYCLE_WATCHDOG_MS);
+
   try {
-    const lock = await client.getMailboxLock("INBOX");
+    await client.connect();
     try {
-      const supabase = getSupabase();
-      const mailbox = user.toLowerCase().trim();
-      const uidNext = (client.mailbox as { uidNext: number }).uidNext;
+      const lock = await client.getMailboxLock("INBOX", {
+        acquireTimeout: LOCK_ACQUIRE_TIMEOUT_MS,
+      });
+      try {
+        const supabase = getSupabase();
+        const mailbox = user.toLowerCase().trim();
+        const uidNext = (client.mailbox as { uidNext: number }).uidNext;
 
-      const lastUidResult = await getLastUid(supabase, mailbox);
-      if (!lastUidResult.ok) return; // read failed — already logged
-      const storedLastUid = lastUidResult.lastUid;
+        const lastUidResult = await getLastUid(supabase, mailbox);
+        if (!lastUidResult.ok) return; // read failed — already logged
+        const storedLastUid = lastUidResult.lastUid;
 
-      if (storedLastUid === null) {
-        // First run ever for this mailbox: baseline at the current high-water
-        // mark and skip the existing backlog entirely — we only want mail
-        // that arrives from now on.
-        await setLastUid(supabase, mailbox, uidNext - 1);
-        console.log(
-          `[imap-poll] First run for ${mailbox} — baselining at UID ${uidNext - 1}, skipping existing backlog`,
-        );
-        return;
-      }
-
-      if (uidNext - 1 <= storedLastUid) {
-        return; // nothing new since last cycle
-      }
-
-      const { data: allowed, error: allowedErr } = await supabase
-        .from("allowed_sender_emails")
-        .select("email");
-
-      if (allowedErr || !allowed || allowed.length === 0) {
-        console.error(
-          "[imap-poll] Could not load allowed senders — skipping this cycle (fail closed)",
-          allowedErr,
-        );
-        return;
-      }
-
-      const allowedSenders = new Set(allowed.map((r) => r.email.toLowerCase().trim()));
-
-      const uids = await client.search({ uid: `${storedLastUid + 1}:*` }, { uid: true });
-      if (!uids || uids.length === 0) {
-        await setLastUid(supabase, mailbox, uidNext - 1);
-        return;
-      }
-
-      uids.sort((a, b) => a - b);
-      const batch = uids.slice(0, MAX_MESSAGES_PER_CYCLE);
-      console.log(
-        `[imap-poll] Found ${uids.length} new message(s) for ${mailbox}, processing ${batch.length}`,
-      );
-
-      let maxAttemptedUid = storedLastUid;
-      for (const uid of batch) {
-        try {
-          await processMessage(client, supabase, uid, allowedSenders);
-        } catch (err) {
-          console.error(`[imap-poll] Failed to process UID ${uid}`, err);
+        if (storedLastUid === null) {
+          // First run ever for this mailbox: baseline at the current high-water
+          // mark and skip the existing backlog entirely — we only want mail
+          // that arrives from now on.
+          await setLastUid(supabase, mailbox, uidNext - 1);
+          console.log(
+            `[imap-poll] First run for ${mailbox} — baselining at UID ${uidNext - 1}, skipping existing backlog`,
+          );
+          return;
         }
-        maxAttemptedUid = Math.max(maxAttemptedUid, uid);
-      }
 
-      // Advance the watermark past everything attempted this cycle (success
-      // or failure) so a single bad message can't stall the poller forever.
-      // If there's more backlog than MAX_MESSAGES_PER_CYCLE, the watermark
-      // only advances to the end of this batch, and the rest is picked up on
-      // the next cycle.
-      const newLastUid = batch.length < uids.length ? maxAttemptedUid : uidNext - 1;
-      await setLastUid(supabase, mailbox, newLastUid);
+        if (uidNext - 1 <= storedLastUid) {
+          return; // nothing new since last cycle
+        }
+
+        const { data: allowed, error: allowedErr } = await supabase
+          .from("allowed_sender_emails")
+          .select("email");
+
+        if (allowedErr || !allowed || allowed.length === 0) {
+          console.error(
+            "[imap-poll] Could not load allowed senders — skipping this cycle (fail closed)",
+            allowedErr,
+          );
+          return;
+        }
+
+        const allowedSenders = new Set(allowed.map((r) => r.email.toLowerCase().trim()));
+
+        const uids = await client.search({ uid: `${storedLastUid + 1}:*` }, { uid: true });
+        if (!uids || uids.length === 0) {
+          await setLastUid(supabase, mailbox, uidNext - 1);
+          return;
+        }
+
+        uids.sort((a, b) => a - b);
+        const batch = uids.slice(0, MAX_MESSAGES_PER_CYCLE);
+        console.log(
+          `[imap-poll] Found ${uids.length} new message(s) for ${mailbox}, processing ${batch.length}`,
+        );
+
+        let maxAttemptedUid = storedLastUid;
+        for (const uid of batch) {
+          try {
+            await processMessage(client, supabase, uid, allowedSenders);
+          } catch (err) {
+            console.error(`[imap-poll] Failed to process UID ${uid}`, err);
+          }
+          maxAttemptedUid = Math.max(maxAttemptedUid, uid);
+        }
+
+        // Advance the watermark past everything attempted this cycle (success
+        // or failure) so a single bad message can't stall the poller forever.
+        // If there's more backlog than MAX_MESSAGES_PER_CYCLE, the watermark
+        // only advances to the end of this batch, and the rest is picked up on
+        // the next cycle.
+        const newLastUid = batch.length < uids.length ? maxAttemptedUid : uidNext - 1;
+        await setLastUid(supabase, mailbox, newLastUid);
+      } finally {
+        lock.release();
+      }
     } finally {
-      lock.release();
+      await client.logout().catch(() => {});
     }
   } finally {
-    await client.logout().catch(() => {});
+    clearTimeout(watchdog);
   }
 }
 
