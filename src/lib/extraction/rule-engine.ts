@@ -1,4 +1,10 @@
-export type RuleField = "supplier" | "amount" | "category" | "currency" | "association_id";
+export type RuleField =
+  | "supplier"
+  | "amount"
+  | "category"
+  | "currency"
+  | "association_id"
+  | "sender_email";
 
 export type RuleOperator =
   | "contains"
@@ -43,6 +49,9 @@ export interface RuleEvaluationTarget {
   category: string | null;
   currency: string | null;
   association_id: string | null;
+  /** The inbound email address the receipt was sent from (one of
+   *  allowed_sender_emails), or null for manual uploads / when unknown. */
+  sender_email: string | null;
 }
 
 export interface ResolvedActions {
@@ -172,6 +181,7 @@ export function summarizeRule(
     category: "Category",
     currency: "Currency",
     association_id: "Association",
+    sender_email: "Sender email",
   };
   const opLabel: Record<RuleOperator, string> = {
     contains: "contains",

@@ -149,6 +149,7 @@ async function processMessage(
           att.contentType,
           att.content,
           subject,
+          sender,
           "imap",
         );
       }
@@ -158,7 +159,7 @@ async function processMessage(
     if (isIncome && bodyText) {
       await extractAndSaveIncomeFromText(supabase, subject, bodyText, "imap");
     } else if (bodyText) {
-      await extractAndSaveExpenseFromText(supabase, subject, bodyText, "imap");
+      await extractAndSaveExpenseFromText(supabase, subject, bodyText, sender, "imap");
     } else {
       console.log(
         `[imap-poll] Email "${subject ?? "(no subject)"}" had no processable attachment or body text`,
