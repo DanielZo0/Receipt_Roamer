@@ -118,9 +118,18 @@ function conditionMatches(condition: RuleCondition, target: RuleEvaluationTarget
   }
 }
 
+/** True if every condition in the list matches the target (AND semantics).
+ *  An empty condition list never matches — a rule needs at least one
+ *  condition to fire. Exported so the /rules live-preview UI can reuse the
+ *  exact same matching logic evaluateRules uses in production. */
+export function conditionsMatch(conditions: RuleCondition[], target: RuleEvaluationTarget): boolean {
+  if (conditions.length === 0) return false;
+  return conditions.every((c) => conditionMatches(c, target));
+}
+
 function ruleMatches(rule: RuleRow, target: RuleEvaluationTarget): boolean {
-  if (!rule.active || rule.conditions.length === 0) return false;
-  return rule.conditions.every((c) => conditionMatches(c, target));
+  if (!rule.active) return false;
+  return conditionsMatch(rule.conditions, target);
 }
 
 /**
