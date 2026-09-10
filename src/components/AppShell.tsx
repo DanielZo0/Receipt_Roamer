@@ -24,7 +24,7 @@ export function AppShell({
           <SidebarTrigger />
           <span className="font-semibold text-foreground">Receipt Roamer</span>
         </header>
-        <main className={cn("mx-auto w-full px-4 py-8", MAX_WIDTH_CLASS[maxWidth])}>{children}</main>
+        <div className={cn("mx-auto w-full px-4 py-8", MAX_WIDTH_CLASS[maxWidth])}>{children}</div>
       </SidebarInset>
     </SidebarProvider>
   );
