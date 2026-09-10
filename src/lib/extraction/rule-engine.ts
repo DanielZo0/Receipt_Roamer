@@ -122,14 +122,14 @@ function conditionMatches(condition: RuleCondition, target: RuleEvaluationTarget
  *  An empty condition list never matches — a rule needs at least one
  *  condition to fire. Exported so the /rules live-preview UI can reuse the
  *  exact same matching logic evaluateRules uses in production. */
-export function conditionsMatch(conditions: RuleCondition[], target: RuleEvaluationTarget): boolean {
+export function matchesAllConditions(conditions: RuleCondition[], target: RuleEvaluationTarget): boolean {
   if (conditions.length === 0) return false;
   return conditions.every((c) => conditionMatches(c, target));
 }
 
 function ruleMatches(rule: RuleRow, target: RuleEvaluationTarget): boolean {
   if (!rule.active) return false;
-  return conditionsMatch(rule.conditions, target);
+  return matchesAllConditions(rule.conditions, target);
 }
 
 /**
