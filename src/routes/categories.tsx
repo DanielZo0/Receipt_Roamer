@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AppNav } from "@/components/AppNav";
+import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ChevronDown, ChevronUp, ExternalLink, FileText, Pencil, Trash2, Plus, X, Save } from "lucide-react";
@@ -89,9 +89,7 @@ function CategoriesPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+    <AppShell maxWidth="4xl">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold">Expense Categories</h1>
@@ -189,8 +187,7 @@ function CategoriesPage() {
             </Card>
           )
         )}
-      </main>
-    </div>
+    </AppShell>
   );
 }
 

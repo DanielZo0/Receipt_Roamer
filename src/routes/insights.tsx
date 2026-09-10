@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AppNav } from "@/components/AppNav";
+import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { TrendingUp, TrendingDown } from "lucide-react";
 
@@ -136,9 +136,7 @@ function InsightsPage() {
     }).format(n);
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+    <AppShell maxWidth="4xl">
         <div className="mb-6">
           <h1 className="text-2xl font-bold">Spending Insights</h1>
           <p className="text-sm text-muted-foreground">
@@ -194,7 +192,6 @@ function InsightsPage() {
             })}
           </div>
         )}
-      </main>
-    </div>
+    </AppShell>
   );
 }

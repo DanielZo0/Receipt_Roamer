@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AppNav } from "@/components/AppNav";
+import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { runCondoTrackerSync } from "@/lib/condotracker-sync.functions";
@@ -127,9 +127,7 @@ function AssociationsPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+    <AppShell maxWidth="4xl">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold">Owners Associations</h1>
@@ -253,8 +251,7 @@ function AssociationsPage() {
             </Card>
           )
         )}
-      </main>
-    </div>
+    </AppShell>
   );
 }
 

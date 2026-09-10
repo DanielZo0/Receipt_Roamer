@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AppNav } from "@/components/AppNav";
+import { AppShell } from "@/components/AppShell";
 import { MobileCardList, MobileCard } from "@/components/ui/responsive-table";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -38,9 +38,8 @@ type AllowedSenderRow = {
 
 function SettingsPage() {
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-10">
+    <AppShell maxWidth="4xl">
+      <div className="space-y-10">
         <div>
           <h1 className="text-2xl font-bold">Settings</h1>
           <p className="text-sm text-muted-foreground">
@@ -55,8 +54,8 @@ function SettingsPage() {
           </h2>
           <AllowedSendersTable />
         </section>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }
 

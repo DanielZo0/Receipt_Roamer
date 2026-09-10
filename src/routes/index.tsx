@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { AppNav } from "@/components/AppNav";
+import { AppShell } from "@/components/AppShell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -93,9 +93,7 @@ function Index() {
     }).format(n);
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-6xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
+    <AppShell maxWidth="6xl">
         <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
           <div>
             <h1 className="text-3xl font-bold">Dashboard</h1>
@@ -246,7 +244,6 @@ function Index() {
             </div>
           )}
         </Card>
-      </main>
-    </div>
+    </AppShell>
   );
 }

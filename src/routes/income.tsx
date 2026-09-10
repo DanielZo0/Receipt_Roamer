@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AppNav } from "@/components/AppNav";
+import { AppShell } from "@/components/AppShell";
 import { OwnerCombobox, type OwnerLite, type AssociationLite } from "@/components/OwnerCombobox";
 import { MobileCardList, MobileCard, MobileCardHeader, MobileCardRow } from "@/components/ui/responsive-table";
 import { supabase } from "@/integrations/supabase/client";
@@ -366,9 +366,7 @@ function IncomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-6xl mx-auto px-4 py-8">
+    <AppShell maxWidth="6xl">
         <h1 className="text-2xl font-bold mb-1">Income</h1>
         <p className="text-sm text-muted-foreground mb-6">
           Upload owner payment screenshots (e.g. Wise transfer confirmations). AI will extract the
@@ -693,8 +691,7 @@ function IncomePage() {
             </>
           );
         })()}
-      </main>
-    </div>
+    </AppShell>
   );
 }
 

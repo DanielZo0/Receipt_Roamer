@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { AppNav } from "@/components/AppNav";
+import { AppShell } from "@/components/AppShell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MobileCardList, MobileCard, MobileCardHeader } from "@/components/ui/responsive-table";
@@ -225,9 +225,7 @@ function UploadLogsPage() {
     logs?.reduce((sum, l) => sum + (l.input_tokens ?? 0) + (l.output_tokens ?? 0), 0) ?? 0;
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+    <AppShell maxWidth="4xl">
         <h1 className="text-2xl font-bold mb-1">Upload logs</h1>
         <p className="text-sm text-muted-foreground mb-6">
           Every upload attempt — successful extractions and failures — with token usage and
@@ -580,7 +578,6 @@ function UploadLogsPage() {
           </MobileCardList>
           </>
         )}
-      </main>
-    </div>
+    </AppShell>
   );
 }

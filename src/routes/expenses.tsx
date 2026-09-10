@@ -22,7 +22,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AppNav } from "@/components/AppNav";
+import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Download, Trash2, FileText, ExternalLink, Info } from "lucide-react";
@@ -361,9 +361,7 @@ function ExpensesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-6xl mx-auto px-4 py-8">
+    <AppShell maxWidth="6xl">
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <h1 className="text-2xl font-bold">Expenses</h1>
           <div className="flex items-center gap-3 flex-wrap">
@@ -708,8 +706,7 @@ function ExpensesPage() {
             ))}
           </MobileCardList>
         )}
-      </main>
-    </div>
+    </AppShell>
   );
 }
 

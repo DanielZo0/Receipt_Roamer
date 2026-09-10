@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AppNav } from "@/components/AppNav";
+import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Trash2, Pencil, Plus, X, Save } from "lucide-react";
@@ -215,9 +215,8 @@ function RulesPage() {
   const assocName = (id: string) => associations?.find((a) => a.id === id)?.name ?? id;
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-10">
+    <AppShell maxWidth="4xl">
+      <div className="space-y-10">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">Automation Rules</h1>
@@ -360,8 +359,8 @@ function RulesPage() {
             </div>
           )}
         </section>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }
 

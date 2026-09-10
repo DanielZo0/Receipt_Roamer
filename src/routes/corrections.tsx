@@ -17,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AppNav } from "@/components/AppNav";
+import { AppShell } from "@/components/AppShell";
 import { MobileCardList, MobileCard, MobileCardRow } from "@/components/ui/responsive-table";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -112,9 +112,7 @@ function CorrectionsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+    <AppShell maxWidth="4xl">
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold">Corrections History</h1>
@@ -220,7 +218,6 @@ function CorrectionsPage() {
             })}
           </MobileCardList>
         )}
-      </main>
-    </div>
+    </AppShell>
   );
 }
