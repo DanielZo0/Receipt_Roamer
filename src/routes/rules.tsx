@@ -7,23 +7,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { AppShell } from "@/components/AppShell";
+import { RuleConditionRow } from "@/components/rules/rule-condition-row";
+import { RuleActionRow } from "@/components/rules/rule-action-row";
+import { RulePreview } from "@/components/rules/rule-preview";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Trash2, Pencil, Plus, X, Save } from "lucide-react";
 import {
   summarizeRule,
   type RuleAction,
-  type RuleActionType,
   type RuleCondition,
-  type RuleField,
-  type RuleOperator,
 } from "@/lib/extraction/rule-engine";
 
 export const Route = createFileRoute("/rules")({
@@ -50,38 +54,6 @@ type RuleRow = {
 };
 
 type Association = { id: string; name: string };
-
-const FIELD_OPTIONS: { value: RuleField; label: string; kind: "text" | "number" }[] = [
-  { value: "supplier", label: "Supplier", kind: "text" },
-  { value: "amount", label: "Amount", kind: "number" },
-  { value: "category", label: "Category", kind: "text" },
-  { value: "currency", label: "Currency", kind: "text" },
-  { value: "association_id", label: "Association", kind: "text" },
-  { value: "sender_email", label: "Sender email", kind: "text" },
-];
-
-const TEXT_OPERATORS: { value: RuleOperator; label: string }[] = [
-  { value: "contains", label: "contains" },
-  { value: "equals", label: "is" },
-  { value: "not_equals", label: "is not" },
-  { value: "regex", label: "matches regex" },
-];
-
-const NUMBER_OPERATORS: { value: RuleOperator; label: string }[] = [
-  { value: "gt", label: "greater than" },
-  { value: "gte", label: "at least" },
-  { value: "lt", label: "less than" },
-  { value: "lte", label: "at most" },
-  { value: "equals", label: "equals" },
-  { value: "between", label: "between" },
-];
-
-const ACTION_OPTIONS: { value: RuleActionType; label: string }[] = [
-  { value: "set_category", label: "Set category" },
-  { value: "set_association", label: "Set association" },
-  { value: "flag_for_review", label: "Flag for review" },
-  { value: "notify", label: "Notify me" },
-];
 
 function RulesPage() {
   const qc = useQueryClient();
@@ -284,15 +256,28 @@ function RulesPage() {
                         <Button size="icon" variant="ghost" onClick={() => setEditingId(r.id)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => {
-                            if (confirm("Delete this rule?")) del.mutate(r.id);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="icon" variant="ghost">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete this rule?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                {r.name ?? "This rule"} will stop running against incoming receipts.
+                                This can't be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => del.mutate(r.id)}>
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </div>
                     <div className="md:hidden space-y-2">
@@ -312,15 +297,28 @@ function RulesPage() {
                         <Button size="icon" variant="ghost" onClick={() => setEditingId(r.id)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => {
-                            if (confirm("Delete this rule?")) del.mutate(r.id);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="icon" variant="ghost">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete this rule?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                {r.name ?? "This rule"} will stop running against incoming receipts.
+                                This can't be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => del.mutate(r.id)}>
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </div>
                   </Card>
@@ -432,108 +430,17 @@ function RuleEditCard({
 
       <div className="space-y-2">
         <Label>If (all conditions must match)</Label>
-        {conditions.map((c, i) => {
-          const fieldMeta = FIELD_OPTIONS.find((f) => f.value === c.field)!;
-          const operatorOptions = fieldMeta.kind === "number" ? NUMBER_OPERATORS : TEXT_OPERATORS;
-          return (
-            <div key={i} className="flex flex-wrap items-center gap-2">
-              <Select
-                value={c.field}
-                onValueChange={(v) =>
-                  updateCondition(i, { field: v as RuleField, operator: "contains", value: "" })
-                }
-              >
-                <SelectTrigger className="w-36">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FIELD_OPTIONS.map((f) => (
-                    <SelectItem key={f.value} value={f.value}>
-                      {f.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={c.operator}
-                onValueChange={(v) => updateCondition(i, { operator: v as RuleOperator })}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {operatorOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {c.field === "association_id" ? (
-                <Select
-                  value={String(c.value)}
-                  onValueChange={(v) => updateCondition(i, { value: v })}
-                >
-                  <SelectTrigger className="w-44">
-                    <SelectValue placeholder="Association" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {associations.map((a) => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : c.field === "sender_email" ? (
-                <Select
-                  value={String(c.value)}
-                  onValueChange={(v) => updateCondition(i, { value: v })}
-                >
-                  <SelectTrigger className="w-52">
-                    <SelectValue placeholder="Sender email" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {senderEmails.map((email) => (
-                      <SelectItem key={email} value={email}>
-                        {email}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  className="w-40"
-                  type={fieldMeta.kind === "number" ? "number" : "text"}
-                  value={c.value}
-                  onChange={(e) =>
-                    updateCondition(i, {
-                      value: fieldMeta.kind === "number" ? Number(e.target.value) : e.target.value,
-                    })
-                  }
-                  placeholder="value"
-                />
-              )}
-              {c.operator === "between" && (
-                <Input
-                  className="w-28"
-                  type="number"
-                  value={c.value2 ?? ""}
-                  onChange={(e) => updateCondition(i, { value2: Number(e.target.value) })}
-                  placeholder="and…"
-                />
-              )}
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => setConditions((prev) => prev.filter((_, idx) => idx !== i))}
-                disabled={conditions.length === 1}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          );
-        })}
+        {conditions.map((c, i) => (
+          <RuleConditionRow
+            key={i}
+            condition={c}
+            associations={associations}
+            senderEmails={senderEmails}
+            onChange={(patch) => updateCondition(i, patch)}
+            onRemove={() => setConditions((prev) => prev.filter((_, idx) => idx !== i))}
+            removable={conditions.length > 1}
+          />
+        ))}
         <Button
           size="sm"
           variant="outline"
@@ -546,59 +453,15 @@ function RuleEditCard({
       <div className="space-y-2">
         <Label>Then</Label>
         {actions.map((a, i) => (
-          <div key={i} className="flex flex-wrap items-center gap-2">
-            <Select
-              value={a.type}
-              onValueChange={(v) => updateAction(i, { type: v as RuleActionType, value: "" })}
-            >
-              <SelectTrigger className="w-44">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ACTION_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {a.type === "set_category" && (
-              <Select value={a.value ?? ""} onValueChange={(v) => updateAction(i, { value: v })}>
-                <SelectTrigger className="w-44">
-                  <SelectValue placeholder="Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            {a.type === "set_association" && (
-              <Select value={a.value ?? ""} onValueChange={(v) => updateAction(i, { value: v })}>
-                <SelectTrigger className="w-44">
-                  <SelectValue placeholder="Association" />
-                </SelectTrigger>
-                <SelectContent>
-                  {associations.map((assoc) => (
-                    <SelectItem key={assoc.id} value={assoc.id}>
-                      {assoc.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setActions((prev) => prev.filter((_, idx) => idx !== i))}
-              disabled={actions.length === 1}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          <RuleActionRow
+            key={i}
+            action={a}
+            associations={associations}
+            categories={categories}
+            onChange={(patch) => updateAction(i, patch)}
+            onRemove={() => setActions((prev) => prev.filter((_, idx) => idx !== i))}
+            removable={actions.length > 1}
+          />
         ))}
         <Button
           size="sm"
@@ -608,6 +471,8 @@ function RuleEditCard({
           <Plus className="h-3.5 w-3.5 mr-1" /> Add action
         </Button>
       </div>
+
+      <RulePreview conditions={conditions} />
 
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onCancel}>
