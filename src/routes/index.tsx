@@ -47,7 +47,7 @@ function StatCard({
 }
 
 function Index() {
-  const { data: totals } = useQuery({
+  const { data: totals, isLoading: totalsLoading } = useQuery({
     queryKey: ["totals"],
     queryFn: async () => {
       const [{ data: assocs }, { data: exps }] = await Promise.all([
@@ -84,7 +84,7 @@ function Index() {
     },
   });
 
-  const { data: incomeTotals } = useQuery({
+  const { data: incomeTotals, isLoading: incomeTotalsLoading } = useQuery({
     queryKey: ["income_totals"],
     queryFn: async () => {
       const [{ data: assocs }, { data: payments }] = await Promise.all([
@@ -150,19 +150,19 @@ function Index() {
           <StatCard
             icon={ReceiptText}
             label="Expenses tracked"
-            value={String(totals?.totalCount ?? 0)}
+            value={totalsLoading ? "—" : String(totals?.totalCount ?? 0)}
           />
           <StatCard
             icon={AlertTriangle}
             label="Unassigned expenses"
-            value={String(totals?.unassignedCount ?? 0)}
-            tone={totals?.unassignedCount ? "warning" : "default"}
+            value={totalsLoading ? "—" : String(totals?.unassignedCount ?? 0)}
+            tone={!totalsLoading && totals?.unassignedCount ? "warning" : "default"}
           />
           <StatCard
             icon={DollarSign}
             label="Unmatched payments"
-            value={String(incomeTotals?.unmatchedCount ?? 0)}
-            tone={incomeTotals?.unmatchedCount ? "warning" : "default"}
+            value={incomeTotalsLoading ? "—" : String(incomeTotals?.unmatchedCount ?? 0)}
+            tone={!incomeTotalsLoading && incomeTotals?.unmatchedCount ? "warning" : "default"}
           />
         </div>
 
