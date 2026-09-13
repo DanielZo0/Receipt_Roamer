@@ -23,7 +23,7 @@ import { RuleActionRow } from "@/components/rules/rule-action-row";
 import { RulePreview } from "@/components/rules/rule-preview";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Trash2, Pencil, Plus, X, Save } from "lucide-react";
+import { Trash2, Pencil, Plus, X, Save, ArrowUp, ArrowDown } from "lucide-react";
 import {
   summarizeRule,
   type RuleAction,
@@ -184,6 +184,29 @@ function RulesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["rule-notifications"] }),
   });
 
+  const reorder = useMutation({
+    mutationFn: async (newOrder: RuleRow[]) => {
+      const updates = newOrder
+        .map((r, idx) => ({ id: r.id, priority: idx, changed: r.priority !== idx }))
+        .filter((u) => u.changed);
+      for (const u of updates) {
+        const { error } = await supabase.from("rules").update({ priority: u.priority }).eq("id", u.id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["rules"] }),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  function moveRule(index: number, direction: -1 | 1) {
+    if (!rules) return;
+    const target = index + direction;
+    if (target < 0 || target >= rules.length) return;
+    const reordered = [...rules];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    reorder.mutate(reordered);
+  }
+
   const assocName = (id: string) => associations?.find((a) => a.id === id)?.name ?? id;
 
   return (
@@ -225,7 +248,7 @@ function RulesPage() {
             </Card>
           ) : (
             <div className="space-y-3">
-              {rules.map((r) =>
+              {rules.map((r, index) =>
                 editingId === r.id ? (
                   <RuleEditCard
                     key={r.id}
@@ -247,6 +270,24 @@ function RulesPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          disabled={index === 0}
+                          onClick={() => moveRule(index, -1)}
+                          title="Move up in priority"
+                        >
+                          <ArrowUp className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          disabled={index === rules.length - 1}
+                          onClick={() => moveRule(index, 1)}
+                          title="Move down in priority"
+                        >
+                          <ArrowDown className="h-4 w-4" />
+                        </Button>
                         <Switch
                           checked={r.active}
                           onCheckedChange={(checked) =>
@@ -294,6 +335,24 @@ function RulesPage() {
                         {summarizeRule(r, { associationName: assocName })}
                       </p>
                       <div className="flex justify-end gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          disabled={index === 0}
+                          onClick={() => moveRule(index, -1)}
+                          title="Move up in priority"
+                        >
+                          <ArrowUp className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          disabled={index === rules.length - 1}
+                          onClick={() => moveRule(index, 1)}
+                          title="Move down in priority"
+                        >
+                          <ArrowDown className="h-4 w-4" />
+                        </Button>
                         <Button size="icon" variant="ghost" onClick={() => setEditingId(r.id)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
