@@ -6,17 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,7 +18,6 @@ import {
   ExternalLink,
   FileText,
   Pencil,
-  Trash2,
   Plus,
   X,
   Save,
@@ -222,27 +211,11 @@ function AssociationsPage() {
                       <Button size="icon" variant="ghost" onClick={() => setEditingId(a.id)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="icon" variant="ghost">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete "{a.name}"?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Linked expenses will be kept but unassigned. This can't be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => del.mutate(a.id)}>
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      <ConfirmDeleteButton
+                        title={`Delete "${a.name}"?`}
+                        description="Linked expenses will be kept but unassigned. This can't be undone."
+                        onConfirm={() => del.mutate(a.id)}
+                      />
                     </div>
                   </div>
                   {expandedId === a.id && (

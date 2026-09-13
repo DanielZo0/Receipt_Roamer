@@ -5,20 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AppShell } from "@/components/AppShell";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -141,30 +130,15 @@ function AllowedSendersTable() {
         rowActions={(r) => {
           const isLast = (rows?.length ?? 0) === 1;
           return (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  disabled={isLast}
-                  title={isLast ? "At least one allowed sender is required" : "Remove"}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Remove {r.email}?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Emails from this address will no longer be accepted by the inbound-email pipeline.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => del.mutate(r.id)}>Remove</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <ConfirmDeleteButton
+              title={`Remove ${r.email}?`}
+              description="Emails from this address will no longer be accepted by the inbound-email pipeline."
+              confirmLabel="Remove"
+              disabled={isLast}
+              disabledReason="At least one allowed sender is required"
+              triggerTitle="Remove"
+              onConfirm={() => del.mutate(r.id)}
+            />
           );
         }}
       />

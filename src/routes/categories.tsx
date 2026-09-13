@@ -5,22 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ChevronDown, ChevronUp, ExternalLink, FileText, Pencil, Trash2, Plus, X, Save } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink, FileText, Pencil, Plus, X, Save } from "lucide-react";
 
 export const Route = createFileRoute("/categories")({
   head: () => ({
@@ -164,28 +154,11 @@ function CategoriesPage() {
                       <Button size="icon" variant="ghost" onClick={() => setEditingId(c.id)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="icon" variant="ghost">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete "{c.name}"?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Existing receipts will keep this category as text, but it won't be
-                              manageable from this list anymore. This can't be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => del.mutate(c.id)}>
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      <ConfirmDeleteButton
+                        title={`Delete "${c.name}"?`}
+                        description="Existing receipts will keep this category as text, but it won't be manageable from this list anymore. This can't be undone."
+                        onConfirm={() => del.mutate(c.id)}
+                      />
                     </div>
                   </div>
                   {expandedId === c.id && (
