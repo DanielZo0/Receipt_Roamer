@@ -6,24 +6,14 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { AppShell } from "@/components/AppShell";
 import { RuleConditionRow } from "@/components/rules/rule-condition-row";
 import { RuleActionRow } from "@/components/rules/rule-action-row";
 import { RulePreview } from "@/components/rules/rule-preview";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Trash2, Pencil, Plus, X, Save, ArrowUp, ArrowDown } from "lucide-react";
+import { Pencil, Plus, X, Save, ArrowUp, ArrowDown } from "lucide-react";
 import {
   summarizeRule,
   type RuleAction,
@@ -297,28 +287,11 @@ function RulesPage() {
                         <Button size="icon" variant="ghost" onClick={() => setEditingId(r.id)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="icon" variant="ghost">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete this rule?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                {r.name ?? "This rule"} will stop running against incoming receipts.
-                                This can't be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => del.mutate(r.id)}>
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                        <ConfirmDeleteButton
+                          title="Delete this rule?"
+                          description={`${r.name ?? "This rule"} will stop running against incoming receipts. This can't be undone.`}
+                          onConfirm={() => del.mutate(r.id)}
+                        />
                       </div>
                     </div>
                     <div className="md:hidden space-y-2">
@@ -356,28 +329,11 @@ function RulesPage() {
                         <Button size="icon" variant="ghost" onClick={() => setEditingId(r.id)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="icon" variant="ghost">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete this rule?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                {r.name ?? "This rule"} will stop running against incoming receipts.
-                                This can't be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => del.mutate(r.id)}>
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                        <ConfirmDeleteButton
+                          title="Delete this rule?"
+                          description={`${r.name ?? "This rule"} will stop running against incoming receipts. This can't be undone.`}
+                          onConfirm={() => del.mutate(r.id)}
+                        />
                       </div>
                     </div>
                   </Card>
