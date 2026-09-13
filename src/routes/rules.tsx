@@ -273,7 +273,7 @@ function RulesPage() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          disabled={index === 0}
+                          disabled={index === 0 || reorder.isPending}
                           onClick={() => moveRule(index, -1)}
                           title="Move up in priority"
                         >
@@ -282,7 +282,7 @@ function RulesPage() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          disabled={index === rules.length - 1}
+                          disabled={index === rules.length - 1 || reorder.isPending}
                           onClick={() => moveRule(index, 1)}
                           title="Move down in priority"
                         >
@@ -338,7 +338,7 @@ function RulesPage() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          disabled={index === 0}
+                          disabled={index === 0 || reorder.isPending}
                           onClick={() => moveRule(index, -1)}
                           title="Move up in priority"
                         >
@@ -347,7 +347,7 @@ function RulesPage() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          disabled={index === rules.length - 1}
+                          disabled={index === rules.length - 1 || reorder.isPending}
                           onClick={() => moveRule(index, 1)}
                           title="Move down in priority"
                         >
