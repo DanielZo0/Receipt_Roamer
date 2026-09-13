@@ -181,7 +181,8 @@ function CategoriesPage() {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Delete "{c.name}"?</AlertDialogTitle>
                             <AlertDialogDescription>
-                              This can't be undone.
+                              Existing receipts will keep this category as text, but it won't be
+                              manageable from this list anymore. This can't be undone.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
