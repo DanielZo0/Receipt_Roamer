@@ -258,27 +258,48 @@ function Index() {
           )}
         </div>
 
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-          Recent uploads
-        </h2>
-        <Card>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Recent transactions
+          </h2>
+          {recent && recent.length > 0 && (
+            <Link to="/expenses" className="text-xs font-medium text-primary hover:underline">
+              View all →
+            </Link>
+          )}
+        </div>
+        <Card className="overflow-hidden">
           {recent && recent.length > 0 ? (
-            <ul className="divide-y">
-              {recent.map((e) => (
-                <li key={e.id} className="p-4 flex justify-between items-center">
-                  <div>
-                    <p className="font-medium">{e.supplier ?? "Unknown supplier"}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {e.expense_date ?? "no date"} ·{" "}
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left font-medium text-muted-foreground px-4 py-2">Date</th>
+                  <th className="text-left font-medium text-muted-foreground px-4 py-2">Supplier</th>
+                  <th className="text-left font-medium text-muted-foreground px-4 py-2">
+                    Association
+                  </th>
+                  <th className="text-right font-medium text-muted-foreground px-4 py-2">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {recent.map((e) => (
+                  <tr key={e.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                      {e.expense_date ?? "—"}
+                    </td>
+                    <td className="px-4 py-2.5 font-medium truncate max-w-[220px]">
+                      {e.supplier ?? "Unknown supplier"}
+                    </td>
+                    <td className="px-4 py-2.5 text-muted-foreground truncate max-w-[180px]">
                       {totals?.associations.find((a) => a.id === e.association_id)?.name ?? "unassigned"}
-                    </p>
-                  </div>
-                  <p className="font-mono text-sm">
-                    {e.amount != null ? fmt(Number(e.amount), e.currency ?? "—") : "—"}
-                  </p>
-                </li>
-              ))}
-            </ul>
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono">
+                      {e.amount != null ? fmt(Number(e.amount), e.currency ?? "—") : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           ) : (
             <div className="p-8 text-center text-muted-foreground">
               No receipts yet.{" "}

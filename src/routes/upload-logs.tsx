@@ -225,7 +225,7 @@ function UploadLogsPage() {
     logs?.reduce((sum, l) => sum + (l.input_tokens ?? 0) + (l.output_tokens ?? 0), 0) ?? 0;
 
   return (
-    <AppShell maxWidth="4xl">
+    <AppShell maxWidth="7xl">
         <h1 className="text-2xl font-bold mb-1">Upload logs</h1>
         <p className="text-sm text-muted-foreground mb-6">
           Every upload attempt — successful extractions and failures — with token usage and
@@ -275,29 +275,29 @@ function UploadLogsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <th className="text-left font-medium text-muted-foreground px-4 py-3 w-6"></th>
-                    <th className="text-left font-medium text-muted-foreground px-4 py-3">File</th>
-                    <th className="text-left font-medium text-muted-foreground px-4 py-3">
+                    <th className="text-left font-medium text-muted-foreground px-3 py-2.5 w-6"></th>
+                    <th className="text-left font-medium text-muted-foreground px-3 py-2.5">File</th>
+                    <th className="text-left font-medium text-muted-foreground px-3 py-2.5">
                       Supplier / Error
                     </th>
-                    <th className="text-left font-medium text-muted-foreground px-4 py-3">
+                    <th className="text-left font-medium text-muted-foreground px-3 py-2.5">
                       Amount
                     </th>
-                    <th className="text-right font-medium text-muted-foreground px-4 py-3">
+                    <th className="text-right font-medium text-muted-foreground px-3 py-2.5">
                       Tokens
                     </th>
-                    <th className="text-right font-medium text-muted-foreground px-4 py-3">
+                    <th className="text-right font-medium text-muted-foreground px-3 py-2.5">
                       Est. cost
                     </th>
-                    <th className="text-right font-medium text-muted-foreground px-4 py-3">Date</th>
-                    <th className="px-4 py-3 w-10"></th>
+                    <th className="text-right font-medium text-muted-foreground px-3 py-2.5">Date</th>
+                    <th className="px-3 py-2.5 w-10"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {logs!.map((log) => (
                     <tr key={log.id} className="hover:bg-muted/30 transition-colors">
                       {/* Status icon */}
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5">
                         {log.status === "success" ? (
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
                         ) : log.status === "processing" ? (
@@ -310,7 +310,7 @@ function UploadLogsPage() {
                       </td>
 
                       {/* File */}
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5">
                         <div className="flex items-center gap-2 min-w-0">
                           <FileTypeIcon mime={log.file_mime} />
                           <div className="min-w-0">
@@ -337,7 +337,7 @@ function UploadLogsPage() {
                       </td>
 
                       {/* Supplier / Error */}
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5">
                         {log.status === "processing" ? (
                           <span className="text-xs text-muted-foreground">
                             {log.retry_count ? `Retrying (attempt ${log.retry_count}/3)…` : "Processing…"}
@@ -374,7 +374,7 @@ function UploadLogsPage() {
                       </td>
 
                       {/* Amount */}
-                      <td className="px-4 py-3 font-mono">
+                      <td className="px-3 py-2.5 font-mono">
                         {log.status === "success" ? (
                           formatAmount(
                             log.pipeline === "income"
@@ -390,7 +390,7 @@ function UploadLogsPage() {
                       </td>
 
                       {/* Tokens */}
-                      <td className="px-4 py-3 text-right text-muted-foreground font-mono">
+                      <td className="px-3 py-2.5 text-right text-muted-foreground font-mono">
                         {log.input_tokens != null || log.output_tokens != null ? (
                           <span
                             title={`In: ${log.input_tokens ?? 0} · Out: ${log.output_tokens ?? 0}`}
@@ -403,12 +403,12 @@ function UploadLogsPage() {
                       </td>
 
                       {/* Cost */}
-                      <td className="px-4 py-3 text-right font-mono text-muted-foreground">
+                      <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">
                         {formatCost(log.estimated_cost_usd)}
                       </td>
 
                       {/* Date */}
-                      <td className="px-4 py-3 text-right text-muted-foreground whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-right text-muted-foreground whitespace-nowrap">
                         {new Date(log.created_at).toLocaleDateString(undefined, {
                           day: "2-digit",
                           month: "short",
@@ -423,7 +423,7 @@ function UploadLogsPage() {
                       </td>
 
                       {/* Retry / Cancel */}
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5">
                         {log.status === "processing" ? (
                           <Button
                             variant="ghost"
