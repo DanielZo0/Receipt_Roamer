@@ -15,6 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppShell } from "@/components/AppShell";
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { OwnerCombobox, type OwnerLite, type AssociationLite } from "@/components/OwnerCombobox";
 import { MobileCardList, MobileCard, MobileCardHeader, MobileCardRow } from "@/components/ui/responsive-table";
 import { supabase } from "@/integrations/supabase/client";
@@ -34,7 +35,6 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
-  Trash2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/income")({
@@ -596,15 +596,11 @@ function IncomePage() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => {
-                                if (confirm("Delete this payment?")) del.mutate(p);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            <ConfirmDeleteButton
+                              title="Delete this payment?"
+                              description={`This will permanently remove the payment from ${p.payer_name ?? "this payer"}${p.file_path ? " and its attached file" : ""}. This can't be undone.`}
+                              onConfirm={() => del.mutate(p)}
+                            />
                           </TableCell>
                         </TableRow>
                       ))
@@ -674,15 +670,11 @@ function IncomePage() {
                             <ExternalLink className="h-4 w-4" />
                           </Button>
                         )}
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => {
-                            if (confirm("Delete this payment?")) del.mutate(p);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <ConfirmDeleteButton
+                          title="Delete this payment?"
+                          description={`This will permanently remove the payment from ${p.payer_name ?? "this payer"}${p.file_path ? " and its attached file" : ""}. This can't be undone.`}
+                          onConfirm={() => del.mutate(p)}
+                        />
                       </div>
                     </MobileCard>
                   ))}
