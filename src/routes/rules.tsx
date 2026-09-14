@@ -6,24 +6,18 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { AppNav } from "@/components/AppNav";
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
+import { AppShell } from "@/components/AppShell";
+import { RuleConditionRow } from "@/components/rules/rule-condition-row";
+import { RuleActionRow } from "@/components/rules/rule-action-row";
+import { RulePreview } from "@/components/rules/rule-preview";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Trash2, Pencil, Plus, X, Save } from "lucide-react";
+import { Pencil, Plus, X, Save, ArrowUp, ArrowDown } from "lucide-react";
 import {
   summarizeRule,
   type RuleAction,
-  type RuleActionType,
   type RuleCondition,
-  type RuleField,
-  type RuleOperator,
 } from "@/lib/extraction/rule-engine";
 
 export const Route = createFileRoute("/rules")({
@@ -50,38 +44,6 @@ type RuleRow = {
 };
 
 type Association = { id: string; name: string };
-
-const FIELD_OPTIONS: { value: RuleField; label: string; kind: "text" | "number" }[] = [
-  { value: "supplier", label: "Supplier", kind: "text" },
-  { value: "amount", label: "Amount", kind: "number" },
-  { value: "category", label: "Category", kind: "text" },
-  { value: "currency", label: "Currency", kind: "text" },
-  { value: "association_id", label: "Association", kind: "text" },
-  { value: "sender_email", label: "Sender email", kind: "text" },
-];
-
-const TEXT_OPERATORS: { value: RuleOperator; label: string }[] = [
-  { value: "contains", label: "contains" },
-  { value: "equals", label: "is" },
-  { value: "not_equals", label: "is not" },
-  { value: "regex", label: "matches regex" },
-];
-
-const NUMBER_OPERATORS: { value: RuleOperator; label: string }[] = [
-  { value: "gt", label: "greater than" },
-  { value: "gte", label: "at least" },
-  { value: "lt", label: "less than" },
-  { value: "lte", label: "at most" },
-  { value: "equals", label: "equals" },
-  { value: "between", label: "between" },
-];
-
-const ACTION_OPTIONS: { value: RuleActionType; label: string }[] = [
-  { value: "set_category", label: "Set category" },
-  { value: "set_association", label: "Set association" },
-  { value: "flag_for_review", label: "Flag for review" },
-  { value: "notify", label: "Notify me" },
-];
 
 function RulesPage() {
   const qc = useQueryClient();
@@ -212,12 +174,34 @@ function RulesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["rule-notifications"] }),
   });
 
+  const reorder = useMutation({
+    mutationFn: async (newOrder: RuleRow[]) => {
+      const updates = newOrder
+        .map((r, idx) => ({ id: r.id, priority: idx, changed: r.priority !== idx }))
+        .filter((u) => u.changed);
+      for (const u of updates) {
+        const { error } = await supabase.from("rules").update({ priority: u.priority }).eq("id", u.id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["rules"] }),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  function moveRule(index: number, direction: -1 | 1) {
+    if (!rules) return;
+    const target = index + direction;
+    if (target < 0 || target >= rules.length) return;
+    const reordered = [...rules];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    reorder.mutate(reordered);
+  }
+
   const assocName = (id: string) => associations?.find((a) => a.id === id)?.name ?? id;
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-10">
+    <AppShell maxWidth="4xl">
+      <div className="space-y-10">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">Automation Rules</h1>
@@ -254,7 +238,7 @@ function RulesPage() {
             </Card>
           ) : (
             <div className="space-y-3">
-              {rules.map((r) =>
+              {rules.map((r, index) =>
                 editingId === r.id ? (
                   <RuleEditCard
                     key={r.id}
@@ -276,6 +260,24 @@ function RulesPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          disabled={index === 0 || reorder.isPending}
+                          onClick={() => moveRule(index, -1)}
+                          title="Move up in priority"
+                        >
+                          <ArrowUp className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          disabled={index === rules.length - 1 || reorder.isPending}
+                          onClick={() => moveRule(index, 1)}
+                          title="Move down in priority"
+                        >
+                          <ArrowDown className="h-4 w-4" />
+                        </Button>
                         <Switch
                           checked={r.active}
                           onCheckedChange={(checked) =>
@@ -285,15 +287,11 @@ function RulesPage() {
                         <Button size="icon" variant="ghost" onClick={() => setEditingId(r.id)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => {
-                            if (confirm("Delete this rule?")) del.mutate(r.id);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <ConfirmDeleteButton
+                          title="Delete this rule?"
+                          description={`${r.name ?? "This rule"} will stop running against incoming receipts. This can't be undone.`}
+                          onConfirm={() => del.mutate(r.id)}
+                        />
                       </div>
                     </div>
                     <div className="md:hidden space-y-2">
@@ -310,18 +308,32 @@ function RulesPage() {
                         {summarizeRule(r, { associationName: assocName })}
                       </p>
                       <div className="flex justify-end gap-1">
-                        <Button size="icon" variant="ghost" onClick={() => setEditingId(r.id)}>
-                          <Pencil className="h-4 w-4" />
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          disabled={index === 0 || reorder.isPending}
+                          onClick={() => moveRule(index, -1)}
+                          title="Move up in priority"
+                        >
+                          <ArrowUp className="h-4 w-4" />
                         </Button>
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => {
-                            if (confirm("Delete this rule?")) del.mutate(r.id);
-                          }}
+                          disabled={index === rules.length - 1 || reorder.isPending}
+                          onClick={() => moveRule(index, 1)}
+                          title="Move down in priority"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <ArrowDown className="h-4 w-4" />
                         </Button>
+                        <Button size="icon" variant="ghost" onClick={() => setEditingId(r.id)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <ConfirmDeleteButton
+                          title="Delete this rule?"
+                          description={`${r.name ?? "This rule"} will stop running against incoming receipts. This can't be undone.`}
+                          onConfirm={() => del.mutate(r.id)}
+                        />
                       </div>
                     </div>
                   </Card>
@@ -360,8 +372,8 @@ function RulesPage() {
             </div>
           )}
         </section>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }
 
@@ -433,108 +445,17 @@ function RuleEditCard({
 
       <div className="space-y-2">
         <Label>If (all conditions must match)</Label>
-        {conditions.map((c, i) => {
-          const fieldMeta = FIELD_OPTIONS.find((f) => f.value === c.field)!;
-          const operatorOptions = fieldMeta.kind === "number" ? NUMBER_OPERATORS : TEXT_OPERATORS;
-          return (
-            <div key={i} className="flex flex-wrap items-center gap-2">
-              <Select
-                value={c.field}
-                onValueChange={(v) =>
-                  updateCondition(i, { field: v as RuleField, operator: "contains", value: "" })
-                }
-              >
-                <SelectTrigger className="w-36">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FIELD_OPTIONS.map((f) => (
-                    <SelectItem key={f.value} value={f.value}>
-                      {f.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={c.operator}
-                onValueChange={(v) => updateCondition(i, { operator: v as RuleOperator })}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {operatorOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {c.field === "association_id" ? (
-                <Select
-                  value={String(c.value)}
-                  onValueChange={(v) => updateCondition(i, { value: v })}
-                >
-                  <SelectTrigger className="w-44">
-                    <SelectValue placeholder="Association" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {associations.map((a) => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : c.field === "sender_email" ? (
-                <Select
-                  value={String(c.value)}
-                  onValueChange={(v) => updateCondition(i, { value: v })}
-                >
-                  <SelectTrigger className="w-52">
-                    <SelectValue placeholder="Sender email" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {senderEmails.map((email) => (
-                      <SelectItem key={email} value={email}>
-                        {email}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  className="w-40"
-                  type={fieldMeta.kind === "number" ? "number" : "text"}
-                  value={c.value}
-                  onChange={(e) =>
-                    updateCondition(i, {
-                      value: fieldMeta.kind === "number" ? Number(e.target.value) : e.target.value,
-                    })
-                  }
-                  placeholder="value"
-                />
-              )}
-              {c.operator === "between" && (
-                <Input
-                  className="w-28"
-                  type="number"
-                  value={c.value2 ?? ""}
-                  onChange={(e) => updateCondition(i, { value2: Number(e.target.value) })}
-                  placeholder="and…"
-                />
-              )}
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => setConditions((prev) => prev.filter((_, idx) => idx !== i))}
-                disabled={conditions.length === 1}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          );
-        })}
+        {conditions.map((c, i) => (
+          <RuleConditionRow
+            key={i}
+            condition={c}
+            associations={associations}
+            senderEmails={senderEmails}
+            onChange={(patch) => updateCondition(i, patch)}
+            onRemove={() => setConditions((prev) => prev.filter((_, idx) => idx !== i))}
+            removable={conditions.length > 1}
+          />
+        ))}
         <Button
           size="sm"
           variant="outline"
@@ -547,59 +468,15 @@ function RuleEditCard({
       <div className="space-y-2">
         <Label>Then</Label>
         {actions.map((a, i) => (
-          <div key={i} className="flex flex-wrap items-center gap-2">
-            <Select
-              value={a.type}
-              onValueChange={(v) => updateAction(i, { type: v as RuleActionType, value: "" })}
-            >
-              <SelectTrigger className="w-44">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ACTION_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {a.type === "set_category" && (
-              <Select value={a.value ?? ""} onValueChange={(v) => updateAction(i, { value: v })}>
-                <SelectTrigger className="w-44">
-                  <SelectValue placeholder="Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            {a.type === "set_association" && (
-              <Select value={a.value ?? ""} onValueChange={(v) => updateAction(i, { value: v })}>
-                <SelectTrigger className="w-44">
-                  <SelectValue placeholder="Association" />
-                </SelectTrigger>
-                <SelectContent>
-                  {associations.map((assoc) => (
-                    <SelectItem key={assoc.id} value={assoc.id}>
-                      {assoc.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setActions((prev) => prev.filter((_, idx) => idx !== i))}
-              disabled={actions.length === 1}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          <RuleActionRow
+            key={i}
+            action={a}
+            associations={associations}
+            categories={categories}
+            onChange={(patch) => updateAction(i, patch)}
+            onRemove={() => setActions((prev) => prev.filter((_, idx) => idx !== i))}
+            removable={actions.length > 1}
+          />
         ))}
         <Button
           size="sm"
@@ -609,6 +486,8 @@ function RuleEditCard({
           <Plus className="h-3.5 w-3.5 mr-1" /> Add action
         </Button>
       </div>
+
+      <RulePreview conditions={conditions} />
 
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onCancel}>

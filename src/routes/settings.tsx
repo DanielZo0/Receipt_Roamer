@@ -2,21 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { AppNav } from "@/components/AppNav";
-import { MobileCardList, MobileCard } from "@/components/ui/responsive-table";
+import { AppShell } from "@/components/AppShell";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -38,9 +29,8 @@ type AllowedSenderRow = {
 
 function SettingsPage() {
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-10">
+    <AppShell maxWidth="4xl">
+      <div className="space-y-10">
         <div>
           <h1 className="text-2xl font-bold">Settings</h1>
           <p className="text-sm text-muted-foreground">
@@ -55,8 +45,8 @@ function SettingsPage() {
           </h2>
           <AllowedSendersTable />
         </section>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }
 
@@ -110,102 +100,48 @@ function AllowedSendersTable() {
     add.mutate(value);
   };
 
+  const columns: DataTableColumn<AllowedSenderRow>[] = [
+    { key: "email", header: "Email", cell: (r) => <span className="font-mono text-sm">{r.email}</span> },
+  ];
+
   return (
     <>
-      <Card className="overflow-x-auto">
-        <div className="flex items-center gap-2 p-4 border-b flex-wrap">
-          <Input
-            type="email"
-            placeholder="name@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleAdd();
-            }}
-            className="max-w-xs flex-1 min-w-0"
-          />
-          <Button onClick={handleAdd} disabled={add.isPending}>
-            Add
-          </Button>
-        </div>
-        <div className="hidden md:block">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Email</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={2} className="text-center text-muted-foreground py-8">
-                    Loading…
-                  </TableCell>
-                </TableRow>
-              ) : !rows || rows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={2} className="text-center text-muted-foreground py-8">
-                    No allowed senders — inbound emails will be rejected until one is added.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                rows.map((r) => {
-                  const isLast = rows.length === 1;
-                  return (
-                    <TableRow key={r.id}>
-                      <TableCell className="font-mono text-sm">{r.email}</TableCell>
-                      <TableCell>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          disabled={isLast}
-                          title={isLast ? "At least one allowed sender is required" : "Remove"}
-                          onClick={() => {
-                            if (confirm(`Remove ${r.email}?`)) del.mutate(r.id);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </Card>
+      <div className="flex items-center gap-2 p-4 border rounded-lg mb-4 flex-wrap bg-card">
+        <Input
+          type="email"
+          placeholder="name@example.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleAdd();
+          }}
+          className="max-w-xs flex-1 min-w-0"
+        />
+        <Button onClick={handleAdd} disabled={add.isPending}>
+          Add
+        </Button>
+      </div>
 
-      {isLoading ? (
-        <p className="text-center text-muted-foreground py-8 md:hidden">Loading…</p>
-      ) : !rows || rows.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8 md:hidden">
-          No allowed senders — inbound emails will be rejected until one is added.
-        </p>
-      ) : (
-        <MobileCardList>
-          {rows.map((r) => {
-            const isLast = rows.length === 1;
-            return (
-              <MobileCard key={r.id} className="flex-row items-center justify-between flex">
-                <span className="font-mono text-sm truncate">{r.email}</span>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  disabled={isLast}
-                  title={isLast ? "At least one allowed sender is required" : "Remove"}
-                  onClick={() => {
-                    if (confirm(`Remove ${r.email}?`)) del.mutate(r.id);
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </MobileCard>
-            );
-          })}
-        </MobileCardList>
-      )}
+      <DataTable
+        columns={columns}
+        rows={rows}
+        isLoading={isLoading}
+        emptyMessage="No allowed senders — inbound emails will be rejected until one is added."
+        rowActions={(r) => {
+          const isLast = (rows?.length ?? 0) === 1;
+          return (
+            <ConfirmDeleteButton
+              title={`Remove ${r.email}?`}
+              description="Emails from this address will no longer be accepted by the inbound-email pipeline."
+              confirmLabel="Remove"
+              disabled={isLast}
+              disabledReason="At least one allowed sender is required"
+              triggerTitle="Remove"
+              onConfirm={() => del.mutate(r.id)}
+            />
+          );
+        }}
+      />
     </>
   );
 }

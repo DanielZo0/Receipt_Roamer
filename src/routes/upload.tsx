@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AppNav } from "@/components/AppNav";
+import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { extractAndSaveExpense } from "@/lib/expenses.functions";
 import { toast } from "sonner";
@@ -367,9 +367,7 @@ function UploadPage() {
   const allFinished = queue.length > 0 && activeCount === 0 && queue.every((f) => f.status === "done" || f.status === "error");
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-2xl mx-auto px-4 py-8">
+    <AppShell maxWidth="2xl">
         <h1 className="text-2xl font-bold mb-1">Upload receipts</h1>
         <p className="text-sm text-muted-foreground mb-6">
           Drop one or more images or PDFs. AI will extract date, supplier, amount, and pick the best matching association.
@@ -461,8 +459,7 @@ function UploadPage() {
             <Link to="/upload-logs" className="underline">upload logs</Link> page.
           </p>
         )}
-      </main>
-    </div>
+    </AppShell>
   );
 }
 

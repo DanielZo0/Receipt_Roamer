@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Card } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -9,16 +8,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { AppNav } from "@/components/AppNav";
-import { MobileCardList, MobileCard, MobileCardRow } from "@/components/ui/responsive-table";
+import { AppShell } from "@/components/AppShell";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/corrections")({
@@ -112,9 +103,7 @@ function CorrectionsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+    <AppShell maxWidth="4xl">
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold">Corrections History</h1>
@@ -138,89 +127,53 @@ function CorrectionsPage() {
           </Select>
         </div>
 
-        <Card className="overflow-x-auto hidden md:block">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Expense</TableHead>
-                <TableHead>Field</TableHead>
-                <TableHead>Original</TableHead>
-                <TableHead>Corrected</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                    Loading…
-                  </TableCell>
-                </TableRow>
-              ) : filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                    No corrections recorded yet.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filtered.map((c) => {
+        <DataTable
+          columns={
+            [
+              {
+                key: "created_at",
+                header: "Date",
+                cell: (c) => new Date(c.created_at).toLocaleString(),
+                className: "whitespace-nowrap",
+              },
+              {
+                key: "expense",
+                header: "Expense",
+                cell: (c) => {
                   const expense = expenseById.get(c.expense_id);
                   return (
-                    <TableRow key={c.id}>
-                      <TableCell className="text-sm tabular-nums whitespace-nowrap">
-                        {new Date(c.created_at).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {expense?.supplier ?? "—"}
-                        {expense?.expense_date ? ` (${expense.expense_date})` : ""}
-                      </TableCell>
-                      <TableCell className="text-sm font-mono">{c.field}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {displayValue(c.field, c.original_value)}
-                      </TableCell>
-                      <TableCell className="text-sm">{displayValue(c.field, c.corrected_value)}</TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </Card>
-
-        {isLoading ? (
-          <p className="text-center text-muted-foreground py-8 md:hidden">Loading…</p>
-        ) : filtered.length === 0 ? (
-          <p className="text-center text-muted-foreground py-8 md:hidden">No corrections recorded yet.</p>
-        ) : (
-          <MobileCardList>
-            {filtered.map((c) => {
-              const expense = expenseById.get(c.expense_id);
-              return (
-                <MobileCard key={c.id}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium truncate">
+                    <>
                       {expense?.supplier ?? "—"}
                       {expense?.expense_date ? ` (${expense.expense_date})` : ""}
-                    </span>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {new Date(c.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <MobileCardRow>
-                    <span className="text-muted-foreground font-mono">{c.field}</span>
-                  </MobileCardRow>
-                  <MobileCardRow>
-                    <span className="text-muted-foreground">
-                      {displayValue(c.field, c.original_value)}
-                    </span>
-                    <span>→ {displayValue(c.field, c.corrected_value)}</span>
-                  </MobileCardRow>
-                </MobileCard>
-              );
-            })}
-          </MobileCardList>
-        )}
-      </main>
-    </div>
+                    </>
+                  );
+                },
+              },
+              {
+                key: "field",
+                header: "Field",
+                cell: (c) => <span className="font-mono">{c.field}</span>,
+              },
+              {
+                key: "original",
+                header: "Original",
+                cell: (c) => (
+                  <span className="text-muted-foreground">
+                    {displayValue(c.field, c.original_value)}
+                  </span>
+                ),
+              },
+              {
+                key: "corrected",
+                header: "Corrected",
+                cell: (c) => displayValue(c.field, c.corrected_value),
+              },
+            ] satisfies DataTableColumn<CorrectionRow>[]
+          }
+          rows={filtered}
+          isLoading={isLoading}
+          emptyMessage="No corrections recorded yet."
+        />
+    </AppShell>
   );
 }

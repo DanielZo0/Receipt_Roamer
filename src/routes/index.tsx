@@ -1,10 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { AppNav } from "@/components/AppNav";
+import { AppShell } from "@/components/AppShell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, FileText, DollarSign } from "lucide-react";
+import { Upload, FileText, DollarSign, ReceiptText, AlertTriangle } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -20,8 +20,34 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  tone = "default",
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  tone?: "default" | "warning";
+}) {
+  return (
+    <Card className="p-4 flex items-center gap-3">
+      <div className={`rounded-md p-2 ${tone === "warning" ? "bg-amber-500/10" : "bg-primary/10"}`}>
+        <Icon
+          className={`h-4 w-4 ${tone === "warning" ? "text-amber-600 dark:text-amber-400" : "text-primary"}`}
+        />
+      </div>
+      <div>
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-xl font-semibold leading-tight">{value}</p>
+      </div>
+    </Card>
+  );
+}
+
 function Index() {
-  const { data: totals } = useQuery({
+  const { data: totals, isLoading: totalsLoading } = useQuery({
     queryKey: ["totals"],
     queryFn: async () => {
       const [{ data: assocs }, { data: exps }] = await Promise.all([
@@ -58,7 +84,7 @@ function Index() {
     },
   });
 
-  const { data: incomeTotals } = useQuery({
+  const { data: incomeTotals, isLoading: incomeTotalsLoading } = useQuery({
     queryKey: ["income_totals"],
     queryFn: async () => {
       const [{ data: assocs }, { data: payments }] = await Promise.all([
@@ -93,15 +119,12 @@ function Index() {
     }).format(n);
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-6xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
+    <AppShell maxWidth="6xl">
         <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
           <div>
             <h1 className="text-3xl font-bold">Dashboard</h1>
             <p className="text-muted-foreground text-sm mt-1">
-              {totals?.totalCount ?? 0} expenses tracked
-              {totals?.unassignedCount ? ` · ${totals.unassignedCount} unassigned` : ""}
+              Overview of your receipts and income.
             </p>
           </div>
           <div className="flex gap-2">
@@ -121,6 +144,26 @@ function Index() {
               </Link>
             </Button>
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
+          <StatCard
+            icon={ReceiptText}
+            label="Expenses tracked"
+            value={totalsLoading ? "—" : String(totals?.totalCount ?? 0)}
+          />
+          <StatCard
+            icon={AlertTriangle}
+            label="Unassigned expenses"
+            value={totalsLoading ? "—" : String(totals?.unassignedCount ?? 0)}
+            tone={!totalsLoading && totals?.unassignedCount ? "warning" : "default"}
+          />
+          <StatCard
+            icon={DollarSign}
+            label="Unmatched payments"
+            value={incomeTotalsLoading ? "—" : String(incomeTotals?.unmatchedCount ?? 0)}
+            tone={!incomeTotalsLoading && incomeTotals?.unmatchedCount ? "warning" : "default"}
+          />
         </div>
 
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
@@ -246,7 +289,6 @@ function Index() {
             </div>
           )}
         </Card>
-      </main>
-    </div>
+    </AppShell>
   );
 }

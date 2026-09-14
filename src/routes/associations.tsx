@@ -6,15 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { AppNav } from "@/components/AppNav";
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { runCondoTrackerSync } from "@/lib/condotracker-sync.functions";
@@ -24,7 +18,6 @@ import {
   ExternalLink,
   FileText,
   Pencil,
-  Trash2,
   Plus,
   X,
   Save,
@@ -127,9 +120,7 @@ function AssociationsPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+    <AppShell maxWidth="4xl">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold">Owners Associations</h1>
@@ -220,21 +211,11 @@ function AssociationsPage() {
                       <Button size="icon" variant="ghost" onClick={() => setEditingId(a.id)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          if (
-                            confirm(
-                              `Delete "${a.name}"? Linked expenses will be kept but unassigned.`,
-                            )
-                          ) {
-                            del.mutate(a.id);
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <ConfirmDeleteButton
+                        title={`Delete "${a.name}"?`}
+                        description="Linked expenses will be kept but unassigned. This can't be undone."
+                        onConfirm={() => del.mutate(a.id)}
+                      />
                     </div>
                   </div>
                   {expandedId === a.id && (
@@ -253,8 +234,7 @@ function AssociationsPage() {
             </Card>
           )
         )}
-      </main>
-    </div>
+    </AppShell>
   );
 }
 
@@ -295,88 +275,50 @@ function AssocReceipts({ associationId }: { associationId: string }) {
     window.open(data.signedUrl, "_blank");
   }
 
-  if (isLoading) {
-    return <p className="p-4 text-sm text-muted-foreground">Loading receipts…</p>;
-  }
-
-  if (!data || data.length === 0) {
-    return (
-      <p className="p-4 text-sm text-muted-foreground">
-        No receipts assigned to this association yet.
-      </p>
-    );
-  }
-
   return (
-    <>
-      <div className="overflow-x-auto hidden md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Supplier</TableHead>
-              <TableHead>Amount</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead className="w-10">File</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.map((e) => (
-              <TableRow key={e.id}>
-                <TableCell className="text-sm tabular-nums">{e.expense_date ?? "—"}</TableCell>
-                <TableCell className="text-sm">{e.supplier ?? "—"}</TableCell>
-                <TableCell className="text-sm tabular-nums">
-                  {e.amount != null
-                    ? `${e.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${e.currency ?? ""}`
-                    : "—"}
-                </TableCell>
-                <TableCell className="text-sm">{e.category ?? "—"}</TableCell>
-                <TableCell>
-                  {e.file_path ? (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7"
-                      onClick={() => openFile(e.file_path)}
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </Button>
-                  ) : (
-                    <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-      <div className="divide-y md:hidden">
-        {data.map((e) => (
-          <div key={e.id} className="p-3 flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-sm font-medium truncate">{e.supplier ?? "—"}</p>
-              <p className="text-xs text-muted-foreground">
-                {e.expense_date ?? "—"} · {e.category ?? "—"}
-              </p>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <span className="text-sm tabular-nums">
-                {e.amount != null
-                  ? `${e.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${e.currency ?? ""}`
-                  : "—"}
-              </span>
-              {e.file_path ? (
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openFile(e.file_path)}>
+    <DataTable
+      columns={
+        [
+          {
+            key: "date",
+            header: "Date",
+            cell: (e) => e.expense_date ?? "—",
+            className: "whitespace-nowrap",
+          },
+          { key: "supplier", header: "Supplier", cell: (e) => e.supplier ?? "—" },
+          {
+            key: "amount",
+            header: "Amount",
+            cell: (e) =>
+              e.amount != null
+                ? `${e.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${e.currency ?? ""}`
+                : "—",
+          },
+          { key: "category", header: "Category", cell: (e) => e.category ?? "—" },
+          {
+            key: "file",
+            header: "File",
+            className: "w-10",
+            cell: (e) =>
+              e.file_path ? (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7"
+                  onClick={() => openFile(e.file_path)}
+                >
                   <ExternalLink className="h-3.5 w-3.5" />
                 </Button>
               ) : (
                 <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </>
+              ),
+          },
+        ] satisfies DataTableColumn<ExpenseRow>[]
+      }
+      rows={data}
+      isLoading={isLoading}
+      emptyMessage="No receipts assigned to this association yet."
+    />
   );
 }
 

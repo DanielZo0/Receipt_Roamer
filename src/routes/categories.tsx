@@ -5,18 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { AppNav } from "@/components/AppNav";
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ChevronDown, ChevronUp, ExternalLink, FileText, Pencil, Trash2, Plus, X, Save } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink, FileText, Pencil, Plus, X, Save } from "lucide-react";
 
 export const Route = createFileRoute("/categories")({
   head: () => ({
@@ -89,9 +83,7 @@ function CategoriesPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNav />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+    <AppShell maxWidth="4xl">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold">Expense Categories</h1>
@@ -162,15 +154,11 @@ function CategoriesPage() {
                       <Button size="icon" variant="ghost" onClick={() => setEditingId(c.id)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          if (confirm(`Delete "${c.name}"?`)) del.mutate(c.id);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <ConfirmDeleteButton
+                        title={`Delete "${c.name}"?`}
+                        description="Existing receipts will keep this category as text, but it won't be manageable from this list anymore. This can't be undone."
+                        onConfirm={() => del.mutate(c.id)}
+                      />
                     </div>
                   </div>
                   {expandedId === c.id && (
@@ -189,8 +177,7 @@ function CategoriesPage() {
             </Card>
           )
         )}
-      </main>
-    </div>
+    </AppShell>
   );
 }
 
@@ -248,90 +235,54 @@ function CatReceipts({ categoryName }: { categoryName: string }) {
   const assocName = (id: string | null) =>
     id ? associations?.find((a) => a.id === id)?.name ?? "—" : "—";
 
-  if (isLoading) {
-    return <p className="p-4 text-sm text-muted-foreground">Loading receipts…</p>;
-  }
-
-  if (!data || data.length === 0) {
-    return (
-      <p className="p-4 text-sm text-muted-foreground">
-        No receipts in this category yet.
-      </p>
-    );
-  }
-
   return (
-    <>
-      <div className="overflow-x-auto hidden md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Supplier</TableHead>
-              <TableHead>Amount</TableHead>
-              <TableHead>Association</TableHead>
-              <TableHead className="w-10">File</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.map((e) => (
-              <TableRow key={e.id}>
-                <TableCell className="text-sm tabular-nums">
-                  {e.expense_date ?? "—"}
-                </TableCell>
-                <TableCell className="text-sm">{e.supplier ?? "—"}</TableCell>
-                <TableCell className="text-sm tabular-nums">
-                  {e.amount != null
-                    ? `${e.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${e.currency ?? ""}`
-                    : "—"}
-                </TableCell>
-                <TableCell className="text-sm">{assocName(e.association_id)}</TableCell>
-                <TableCell>
-                  {e.file_path ? (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7"
-                      onClick={() => openFile(e.file_path)}
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </Button>
-                  ) : (
-                    <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-      <div className="divide-y md:hidden">
-        {data.map((e) => (
-          <div key={e.id} className="p-3 flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-sm font-medium truncate">{e.supplier ?? "—"}</p>
-              <p className="text-xs text-muted-foreground">
-                {e.expense_date ?? "—"} · {assocName(e.association_id)}
-              </p>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <span className="text-sm tabular-nums">
-                {e.amount != null
-                  ? `${e.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${e.currency ?? ""}`
-                  : "—"}
-              </span>
-              {e.file_path ? (
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openFile(e.file_path)}>
+    <DataTable
+      columns={
+        [
+          {
+            key: "date",
+            header: "Date",
+            cell: (e) => e.expense_date ?? "—",
+            className: "whitespace-nowrap",
+          },
+          { key: "supplier", header: "Supplier", cell: (e) => e.supplier ?? "—" },
+          {
+            key: "amount",
+            header: "Amount",
+            cell: (e) =>
+              e.amount != null
+                ? `${e.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${e.currency ?? ""}`
+                : "—",
+          },
+          {
+            key: "association",
+            header: "Association",
+            cell: (e) => assocName(e.association_id),
+          },
+          {
+            key: "file",
+            header: "File",
+            className: "w-10",
+            cell: (e) =>
+              e.file_path ? (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7"
+                  onClick={() => openFile(e.file_path)}
+                >
                   <ExternalLink className="h-3.5 w-3.5" />
                 </Button>
               ) : (
                 <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </>
+              ),
+          },
+        ] satisfies DataTableColumn<ExpenseRow>[]
+      }
+      rows={data}
+      isLoading={isLoading}
+      emptyMessage="No receipts in this category yet."
+    />
   );
 }
 
