@@ -23,9 +23,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppShell } from "@/components/AppShell";
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Download, Trash2, FileText, ExternalLink, Info } from "lucide-react";
+import { Download, FileText, ExternalLink, Info } from "lucide-react";
 import {
   MobileCardList,
   MobileCard,
@@ -554,15 +555,11 @@ function ExpensesPage() {
                       />
                     </TableCell>
                     <TableCell>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          if (confirm("Delete this expense?")) del.mutate(e);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <ConfirmDeleteButton
+                        title="Delete this expense?"
+                        description={`This will permanently remove ${e.supplier ?? "this expense"}${e.file_path ? " and its attached receipt file" : ""}. This can't be undone.`}
+                        onConfirm={() => del.mutate(e)}
+                      />
                     </TableCell>
                   </TableRow>
                 ))
@@ -691,15 +688,11 @@ function ExpensesPage() {
                         <FileText className="h-4 w-4 text-muted-foreground" />
                       </Button>
                     )}
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => {
-                        if (confirm("Delete this expense?")) del.mutate(e);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <ConfirmDeleteButton
+                      title="Delete this expense?"
+                      description={`This will permanently remove ${e.supplier ?? "this expense"}${e.file_path ? " and its attached receipt file" : ""}. This can't be undone.`}
+                      onConfirm={() => del.mutate(e)}
+                    />
                   </div>
                 </div>
               </MobileCard>
