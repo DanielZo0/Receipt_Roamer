@@ -361,7 +361,7 @@ function ExpensesPage() {
   }
 
   return (
-    <AppShell maxWidth="6xl">
+    <AppShell maxWidth="7xl">
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <h1 className="text-2xl font-bold">Expenses</h1>
           <div className="flex items-center gap-3 flex-wrap">
@@ -457,7 +457,7 @@ function ExpensesPage() {
                           ev.target.value !== (e.expense_date ?? "") &&
                           update.mutate({ id: e.id, expense_date: ev.target.value || null })
                         }
-                        className="w-36"
+                        className="w-28"
                       />
                     </TableCell>
                     <TableCell>
@@ -467,7 +467,7 @@ function ExpensesPage() {
                           ev.target.value !== (e.supplier ?? "") &&
                           update.mutate({ id: e.id, supplier: ev.target.value || null })
                         }
-                        className="min-w-40"
+                        className="min-w-28"
                       />
                     </TableCell>
                     <TableCell>
@@ -480,7 +480,7 @@ function ExpensesPage() {
                             const v = ev.target.value ? Number(ev.target.value) : null;
                             if (v !== e.amount) update.mutate({ id: e.id, amount: v });
                           }}
-                          className="w-24"
+                          className="w-20"
                         />
                         <Input
                           defaultValue={e.currency ?? ""}
@@ -488,7 +488,7 @@ function ExpensesPage() {
                             ev.target.value !== (e.currency ?? "") &&
                             update.mutate({ id: e.id, currency: ev.target.value || null })
                           }
-                          className="w-16"
+                          className="w-14"
                           placeholder="EUR"
                         />
                       </div>
@@ -500,7 +500,7 @@ function ExpensesPage() {
                           ev.target.value !== (e.category ?? "") &&
                           update.mutate({ id: e.id, category: ev.target.value || null })
                         }
-                        className="min-w-28"
+                        className="min-w-20"
                       />
                     </TableCell>
                     <TableCell>
@@ -510,7 +510,7 @@ function ExpensesPage() {
                           ev.target.value !== (e.reference_number ?? "") &&
                           update.mutate({ id: e.id, reference_number: ev.target.value || null })
                         }
-                        className="min-w-28"
+                        className="min-w-20"
                         placeholder="Invoice #"
                       />
                     </TableCell>
@@ -521,7 +521,7 @@ function ExpensesPage() {
                           update.mutate({ id: e.id, association_id: v === "none" ? null : v })
                         }
                       >
-                        <SelectTrigger className="min-w-40">
+                        <SelectTrigger className="min-w-32">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>

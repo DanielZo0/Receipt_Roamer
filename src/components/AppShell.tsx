@@ -7,6 +7,7 @@ const MAX_WIDTH_CLASS = {
   "2xl": "max-w-2xl",
   "4xl": "max-w-4xl",
   "6xl": "max-w-6xl",
+  "7xl": "max-w-7xl",
 } as const;
 
 export function AppShell({
