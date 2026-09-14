@@ -166,55 +166,6 @@ function Index() {
           />
         </div>
 
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-          Totals per association
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 mb-8">
-          {totals?.associations.length === 0 ? (
-            <Card className="p-6 col-span-full text-center">
-              <p className="text-muted-foreground mb-3">No associations yet.</p>
-              <Button asChild variant="outline">
-                <Link to="/associations">Add your first association</Link>
-              </Button>
-            </Card>
-          ) : (
-            totals?.associations.map((a) => {
-              const sums = totals.byAssoc.get(a.id);
-              return (
-                <Card key={a.id} className="p-3 sm:p-4">
-                  <h3 className="font-semibold mb-1 truncate">{a.name}</h3>
-                  {sums && sums.size > 0 ? (
-                    <ul className="text-sm space-y-0.5">
-                      {Array.from(sums.entries()).map(([cur, sum]) => (
-                        <li key={cur} className="text-foreground">
-                          {fmt(sum, cur)}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No expenses</p>
-                  )}
-                </Card>
-              );
-            })
-          )}
-          {totals?.unassignedCount ? (
-            <Card className="p-4 border-dashed">
-              <h3 className="font-semibold mb-1">Unassigned</h3>
-              {(() => {
-                const sums = totals.byAssoc.get("__none__");
-                return sums && sums.size > 0 ? (
-                  <ul className="text-sm space-y-0.5">
-                    {Array.from(sums.entries()).map(([cur, sum]) => (
-                      <li key={cur}>{fmt(sum, cur)}</li>
-                    ))}
-                  </ul>
-                ) : null;
-              })()}
-            </Card>
-          ) : null}
-        </div>
-
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Income per association
@@ -310,6 +261,55 @@ function Index() {
             </div>
           )}
         </Card>
+
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3 mt-8">
+          Totals per association
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+          {totals?.associations.length === 0 ? (
+            <Card className="p-6 col-span-full text-center">
+              <p className="text-muted-foreground mb-3">No associations yet.</p>
+              <Button asChild variant="outline">
+                <Link to="/associations">Add your first association</Link>
+              </Button>
+            </Card>
+          ) : (
+            totals?.associations.map((a) => {
+              const sums = totals.byAssoc.get(a.id);
+              return (
+                <Card key={a.id} className="p-3 sm:p-4">
+                  <h3 className="font-semibold mb-1 truncate">{a.name}</h3>
+                  {sums && sums.size > 0 ? (
+                    <ul className="text-sm space-y-0.5">
+                      {Array.from(sums.entries()).map(([cur, sum]) => (
+                        <li key={cur} className="text-foreground">
+                          {fmt(sum, cur)}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No expenses</p>
+                  )}
+                </Card>
+              );
+            })
+          )}
+          {totals?.unassignedCount ? (
+            <Card className="p-4 border-dashed">
+              <h3 className="font-semibold mb-1">Unassigned</h3>
+              {(() => {
+                const sums = totals.byAssoc.get("__none__");
+                return sums && sums.size > 0 ? (
+                  <ul className="text-sm space-y-0.5">
+                    {Array.from(sums.entries()).map(([cur, sum]) => (
+                      <li key={cur}>{fmt(sum, cur)}</li>
+                    ))}
+                  </ul>
+                ) : null;
+              })()}
+            </Card>
+          ) : null}
+        </div>
     </AppShell>
   );
 }
