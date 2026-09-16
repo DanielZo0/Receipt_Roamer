@@ -167,10 +167,23 @@ async function pollOnce(host: string, user: string, pass: string) {
           .from("allowed_sender_emails")
           .select("email");
 
-        if (allowedErr || !allowed || allowed.length === 0) {
+        if (allowedErr) {
           console.error(
             "[imap-poll] Could not load allowed senders — skipping this cycle (fail closed)",
             allowedErr,
+          );
+          await supabase.from("upload_logs").insert({
+            file_name: `IMAP poll (${mailbox})`,
+            status: "error",
+            source: "imap",
+            error_message: `Could not load allowed senders: ${allowedErr.message}`,
+          } as never);
+          return;
+        }
+
+        if (!allowed || allowed.length === 0) {
+          console.error(
+            `[imap-poll] No allowed senders configured — skipping this cycle (fail closed)`,
           );
           return;
         }
