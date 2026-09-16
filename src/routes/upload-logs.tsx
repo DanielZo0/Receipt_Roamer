@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { MobileCardList, MobileCard, MobileCardHeader } from "@/components/ui/responsive-table";
 import { supabase } from "@/integrations/supabase/client";
 import { extractAndSaveExpense } from "@/lib/expenses.functions";
+import { runImapPollNow } from "@/lib/imap-poll.functions";
 import { toast } from "sonner";
 import {
   CheckCircle2,
@@ -111,17 +112,41 @@ function formatRelativeTime(iso: string): string {
 function ImapPollStatus({
   isLoading,
   state,
+  onPollNow,
+  polling,
 }: {
   isLoading: boolean;
   state: { mailbox: string; last_uid: number; updated_at: string } | null | undefined;
+  onPollNow: () => void;
+  polling: boolean;
 }) {
   if (isLoading) return null;
 
+  const pollNowButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      className="h-7 flex-shrink-0"
+      disabled={polling}
+      onClick={onPollNow}
+    >
+      {polling ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <RefreshCw className="h-3.5 w-3.5" />
+      )}
+      Poll now
+    </Button>
+  );
+
   if (!state) {
     return (
-      <Card className="p-3 mb-6 flex items-center gap-2 text-sm text-muted-foreground">
-        <Inbox className="h-4 w-4" />
-        Yahoo IMAP polling hasn't run yet (not configured, or no cycle has completed).
+      <Card className="p-3 mb-6 flex items-center justify-between gap-2 text-sm text-muted-foreground">
+        <span className="flex items-center gap-2">
+          <Inbox className="h-4 w-4" />
+          Yahoo IMAP polling hasn't run yet (not configured, or no cycle has completed).
+        </span>
+        {pollNowButton}
       </Card>
     );
   }
@@ -130,19 +155,20 @@ function ImapPollStatus({
 
   return (
     <Card
-      className={`p-3 mb-6 flex items-center gap-2 text-sm ${isStale ? "border-amber-500/50" : ""}`}
+      className={`p-3 mb-6 flex items-center justify-between gap-2 text-sm ${isStale ? "border-amber-500/50" : ""}`}
     >
-      {isStale ? (
-        <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-      ) : (
-        <Inbox className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-      )}
-      <span className={isStale ? "text-amber-600" : "text-muted-foreground"}>
+      <span className={`flex items-center gap-2 ${isStale ? "text-amber-600" : "text-muted-foreground"}`}>
+        {isStale ? (
+          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+        ) : (
+          <Inbox className="h-4 w-4 flex-shrink-0" />
+        )}
         Yahoo IMAP poller ({state.mailbox}) last ran{" "}
         <span className="font-medium">{formatRelativeTime(state.updated_at)}</span>
         {" · "}watermark UID {state.last_uid}
         {isStale && " — no poll in over 48h, check the poller / IMAP credentials"}
       </span>
+      {pollNowButton}
     </Card>
   );
 }
@@ -180,7 +206,9 @@ function StatCard({
 function UploadLogsPage() {
   const qc = useQueryClient();
   const extractFn = useServerFn(extractAndSaveExpense);
+  const pollNowFn = useServerFn(runImapPollNow);
   const [retrying, setRetrying] = useState<Set<string>>(new Set());
+  const [polling, setPolling] = useState(false);
 
   const { data: logs, isLoading } = useQuery<LogRow[]>({
     queryKey: ["upload-logs"],
@@ -219,6 +247,24 @@ function UploadLogsPage() {
       return data;
     },
   });
+
+  async function handlePollNow() {
+    setPolling(true);
+    try {
+      const result = await pollNowFn();
+      if (result.ok) {
+        toast.success("Poll cycle complete");
+      } else {
+        toast.error(result.reason);
+      }
+      qc.invalidateQueries({ queryKey: ["imap-poll-state"] });
+      qc.invalidateQueries({ queryKey: ["upload-logs"] });
+    } catch (e) {
+      toast.error((e as Error).message || "Poll failed");
+    } finally {
+      setPolling(false);
+    }
+  }
 
   async function handleRetry(log: LogRow) {
     // Retry requires the original file — we can't recover the binary from the server.
@@ -300,7 +346,12 @@ function UploadLogsPage() {
           estimated Gemini API cost.
         </p>
 
-        <ImapPollStatus isLoading={imapPollStateLoading} state={imapPollState} />
+        <ImapPollStatus
+          isLoading={imapPollStateLoading}
+          state={imapPollState}
+          onPollNow={handlePollNow}
+          polling={polling}
+        />
 
         {/* Stats row */}
         {!isLoading && totalLogs > 0 && (

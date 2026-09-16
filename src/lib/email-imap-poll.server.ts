@@ -52,6 +52,23 @@ const LOCK_ACQUIRE_TIMEOUT_MS = 30 * 1000;
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
+// Guards against a manual trigger and the scheduled cycle overlapping —
+// both would otherwise try to open their own IMAP connection at once.
+let pollInProgress = false;
+
+async function runGuardedCycle(host: string, user: string, pass: string) {
+  if (pollInProgress) {
+    console.log("[imap-poll] Cycle already in progress — skipping");
+    return;
+  }
+  pollInProgress = true;
+  try {
+    await pollOnce(host, user, pass);
+  } finally {
+    pollInProgress = false;
+  }
+}
+
 /** Starts the IMAP poll loop once per server process. No-op if already
  *  started, or if the required env vars aren't configured. */
 export function startImapPoller() {
@@ -72,11 +89,36 @@ export function startImapPoller() {
   console.log(`[imap-poll] Starting IMAP poller for ${user} (every ${intervalMs}ms)`);
 
   const runCycle = () => {
-    pollOnce(host, user, pass).catch((err) => console.error("[imap-poll] Poll cycle failed", err));
+    runGuardedCycle(host, user, pass).catch((err) =>
+      console.error("[imap-poll] Poll cycle failed", err),
+    );
   };
 
   runCycle(); // run once immediately on boot
   pollTimer = setInterval(runCycle, intervalMs);
+}
+
+/** Runs a single IMAP poll cycle immediately, outside the regular interval —
+ *  used by the "Poll now" button on the Upload Logs page. Returns a reason
+ *  when it can't run (not configured, or a cycle is already in flight) so
+ *  the caller can surface that to the user instead of a generic error. */
+export async function triggerImapPollNow(): Promise<
+  { ok: true } | { ok: false; reason: string }
+> {
+  const host = process.env.YAHOO_IMAP_HOST || "imap.mail.yahoo.com";
+  const user = process.env.YAHOO_IMAP_USER;
+  const pass = process.env.YAHOO_IMAP_APP_PASSWORD;
+
+  if (!user || !pass) {
+    return { ok: false, reason: "Yahoo IMAP polling isn't configured on the server." };
+  }
+  if (pollInProgress) {
+    return { ok: false, reason: "A poll cycle is already running — try again shortly." };
+  }
+
+  console.log(`[imap-poll] Manual trigger for ${user}`);
+  await runGuardedCycle(host, user, pass);
+  return { ok: true };
 }
 
 /** Reads the stored watermark for a mailbox. `ok: false` means the read
