@@ -259,6 +259,7 @@ export async function runExtractionPipeline(
     expenseId: inserted.id,
     fileName: params.fileName,
     extracted,
+    finalAssociationId,
     validation,
     ruleMatch,
     matchedRuleIds: ruleEvaluation.matchedRuleIds,
@@ -420,6 +421,7 @@ export async function runExtractionPipelineFromText(
     expenseId: inserted.id,
     fileName: params.emailSubject ?? "(email body text)",
     extracted,
+    finalAssociationId,
     validation,
     ruleMatch,
     matchedRuleIds: ruleEvaluation.matchedRuleIds,
@@ -571,6 +573,7 @@ async function runLedgerBranch(
         association_id: associationMatch.association_id,
         reference_number: lineItem.reference_number,
       },
+      finalAssociationId: associationMatch.association_id,
       validation: { valid: true, errors: [], warnings: [] },
       ruleMatch: associationMatch,
       matchedRuleIds,
@@ -633,6 +636,11 @@ async function writeAuditLog(
     expenseId: string;
     fileName: string;
     extracted: Extraction;
+    /** The validated association id actually used for the expense (or null) —
+     *  NOT the LLM's raw, unvalidated guess. extraction_audit_log.extracted_association_id
+     *  is a UUID column; writing the LLM's raw output there can fail (e.g. the
+     *  model occasionally emits a reference number in this field instead). */
+    finalAssociationId: string | null;
     validation: { valid: boolean; errors: ValidationError[]; warnings: ValidationError[] };
     ruleMatch: { association_id: string | null; confidence: number; matched_by: string[] };
     matchedRuleIds: string[];
@@ -648,6 +656,7 @@ async function writeAuditLog(
     expenseId,
     fileName,
     extracted,
+    finalAssociationId,
     validation,
     ruleMatch,
     matchedRuleIds,
@@ -667,7 +676,7 @@ async function writeAuditLog(
     extracted_amount: extracted.amount,
     extracted_currency: extracted.currency,
     extracted_category: extracted.category,
-    extracted_association_id: extracted.association_id,
+    extracted_association_id: finalAssociationId,
     extracted_reference_number: extracted.reference_number,
     phase: recheckPerformed ? "llm_recheck" : "llm_extraction",
     validation_errors: validation.errors.length ? (validation.errors as never) : null,

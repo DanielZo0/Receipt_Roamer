@@ -281,7 +281,7 @@ export type Database = {
           estimated_cost_usd: number | null;
           pipeline: "expense" | "income";
           income_payment_id: string | null;
-          source: "upload" | "email";
+          source: "upload" | "email" | "imap";
           retry_count: number;
           next_retry_at: string | null;
           cancel_requested: boolean;
@@ -300,7 +300,7 @@ export type Database = {
           estimated_cost_usd?: number | null;
           pipeline?: "expense" | "income";
           income_payment_id?: string | null;
-          source?: "upload" | "email";
+          source?: "upload" | "email" | "imap";
           retry_count?: number;
           next_retry_at?: string | null;
           cancel_requested?: boolean;
@@ -319,7 +319,7 @@ export type Database = {
           estimated_cost_usd?: number | null;
           pipeline?: "expense" | "income";
           income_payment_id?: string | null;
-          source?: "upload" | "email";
+          source?: "upload" | "email" | "imap";
           retry_count?: number;
           next_retry_at?: string | null;
           cancel_requested?: boolean;

@@ -22,6 +22,8 @@ import {
   Mail,
   Ban,
   CircleSlash,
+  Inbox,
+  AlertTriangle,
 } from "lucide-react";
 
 export const Route = createFileRoute("/upload-logs")({
@@ -49,7 +51,7 @@ type LogRow = {
   input_tokens: number | null;
   output_tokens: number | null;
   estimated_cost_usd: number | null;
-  source: "upload" | "email" | null;
+  source: "upload" | "email" | "imap" | null;
   pipeline: "expense" | "income" | null;
   income_payment_id: string | null;
   retry_count: number | null;
@@ -91,6 +93,58 @@ function formatAmount(amount: number | null, currency: string | null): string {
   } catch {
     return `${amount} ${currency ?? ""}`.trim();
   }
+}
+
+const IMAP_STALE_THRESHOLD_MS = 48 * 60 * 60 * 1000; // 2x the default 24h poll interval
+
+function formatRelativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const diffMin = Math.round(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.round(diffHr / 24);
+  return `${diffDay}d ago`;
+}
+
+function ImapPollStatus({
+  isLoading,
+  state,
+}: {
+  isLoading: boolean;
+  state: { mailbox: string; last_uid: number; updated_at: string } | null | undefined;
+}) {
+  if (isLoading) return null;
+
+  if (!state) {
+    return (
+      <Card className="p-3 mb-6 flex items-center gap-2 text-sm text-muted-foreground">
+        <Inbox className="h-4 w-4" />
+        Yahoo IMAP polling hasn't run yet (not configured, or no cycle has completed).
+      </Card>
+    );
+  }
+
+  const isStale = Date.now() - new Date(state.updated_at).getTime() > IMAP_STALE_THRESHOLD_MS;
+
+  return (
+    <Card
+      className={`p-3 mb-6 flex items-center gap-2 text-sm ${isStale ? "border-amber-500/50" : ""}`}
+    >
+      {isStale ? (
+        <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+      ) : (
+        <Inbox className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+      )}
+      <span className={isStale ? "text-amber-600" : "text-muted-foreground"}>
+        Yahoo IMAP poller ({state.mailbox}) last ran{" "}
+        <span className="font-medium">{formatRelativeTime(state.updated_at)}</span>
+        {" · "}watermark UID {state.last_uid}
+        {isStale && " — no poll in over 48h, check the poller / IMAP credentials"}
+      </span>
+    </Card>
+  );
 }
 
 function FileTypeIcon({ mime }: { mime: string | null }) {
@@ -150,6 +204,20 @@ function UploadLogsPage() {
     // progress (retry_count) and eventual success/error show up live.
     refetchInterval: (query) =>
       query.state.data?.some((l) => l.status === "processing") ? 2000 : false,
+  });
+
+  const { data: imapPollState, isLoading: imapPollStateLoading } = useQuery({
+    queryKey: ["imap-poll-state"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("imap_poll_state")
+        .select("mailbox, last_uid, updated_at")
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    },
   });
 
   async function handleRetry(log: LogRow) {
@@ -231,6 +299,8 @@ function UploadLogsPage() {
           Every upload attempt — successful extractions and failures — with token usage and
           estimated Gemini API cost.
         </p>
+
+        <ImapPollStatus isLoading={imapPollStateLoading} state={imapPollState} />
 
         {/* Stats row */}
         {!isLoading && totalLogs > 0 && (
@@ -324,6 +394,11 @@ function UploadLogsPage() {
                               {log.source === "email" && (
                                 <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
                                   <Mail className="h-2.5 w-2.5" /> Email
+                                </span>
+                              )}
+                              {log.source === "imap" && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                                  <Inbox className="h-2.5 w-2.5" /> IMAP
                                 </span>
                               )}
                               {log.pipeline === "income" && (
@@ -511,6 +586,11 @@ function UploadLogsPage() {
                   {log.source === "email" && (
                     <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
                       <Mail className="h-2.5 w-2.5" /> Email
+                    </span>
+                  )}
+                  {log.source === "imap" && (
+                    <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                      <Inbox className="h-2.5 w-2.5" /> IMAP
                     </span>
                   )}
                   {log.pipeline === "income" && (

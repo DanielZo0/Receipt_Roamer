@@ -400,11 +400,24 @@ export async function handleMailgunWebhook(request: Request): Promise<Response> 
     .from("allowed_sender_emails")
     .select("email");
 
-  if (allowedErr || !allowed || allowed.length === 0) {
+  if (allowedErr) {
     console.error(
       "[email-inbound] Could not load allowed senders — rejecting (fail closed)",
       allowedErr,
     );
+    const subjectForLog = (form.get("subject") as string | null)?.trim() || "(no subject)";
+    await supabase.from("upload_logs").insert({
+      file_name: subjectForLog,
+      status: "error",
+      source: "email",
+      error_message: `Could not load allowed senders: ${allowedErr.message}`,
+    } as never);
+    // Return 200 so Mailgun doesn't retry — we just don't process it
+    return new Response("OK", { status: 200 });
+  }
+
+  if (!allowed || allowed.length === 0) {
+    console.error("[email-inbound] No allowed senders configured — rejecting (fail closed)");
     // Return 200 so Mailgun doesn't retry — we just don't process it
     return new Response("OK", { status: 200 });
   }
