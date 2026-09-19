@@ -199,6 +199,11 @@ async function pollOnce(host: string, user: string, pass: string) {
         }
 
         if (uidNext - 1 <= storedLastUid) {
+          // Refresh updated_at even though the watermark itself isn't moving —
+          // it's what the dashboard's staleness check reads as "last ran". Without
+          // this, a mailbox that simply has no new mail for a couple of days looks
+          // identical to a poller that has stopped running entirely.
+          await setLastUid(supabase, mailbox, storedLastUid);
           console.log(
             `[imap-poll] Cycle complete for ${mailbox} — nothing new (watermark: UID ${storedLastUid})`,
           );
