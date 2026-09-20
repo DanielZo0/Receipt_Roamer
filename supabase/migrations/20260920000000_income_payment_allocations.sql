@@ -9,7 +9,8 @@ CREATE TABLE public.income_payment_allocations (
   payment_id UUID NOT NULL REFERENCES public.income_payments(id) ON DELETE CASCADE,
   owner_id UUID REFERENCES public.owners(id) ON DELETE SET NULL,
   condominium_id UUID REFERENCES public.associations(id),
-  amount NUMERIC(14,2) NOT NULL,
+  -- Nullable: a payment can be attributed to an owner before its amount is known.
+  amount NUMERIC(14,2),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -24,10 +25,25 @@ CREATE INDEX income_payment_allocations_owner_idx ON public.income_payment_alloc
 CREATE INDEX income_payment_allocations_condominium_idx ON public.income_payment_allocations(condominium_id);
 CREATE INDEX income_payment_allocations_updated_idx ON public.income_payment_allocations(updated_at);
 
+-- The outbound CondoTracker feed pages on updated_at, so a row that changes
+-- without advancing it would never be sent. Enforce it here rather than
+-- relying on every future writer to remember.
+CREATE FUNCTION public.touch_income_payment_allocations_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER income_payment_allocations_set_updated_at
+  BEFORE UPDATE ON public.income_payment_allocations
+  FOR EACH ROW EXECUTE FUNCTION public.touch_income_payment_allocations_updated_at();
+
 -- Backfill: one allocation per already-matched payment. Additive only --
 -- no existing income_payments row is modified or deleted.
 INSERT INTO public.income_payment_allocations (payment_id, owner_id, condominium_id, amount)
-SELECT id, owner_id, condominium_id, COALESCE(amount, 0)
+SELECT id, owner_id, condominium_id, amount
 FROM public.income_payments
 WHERE owner_id IS NOT NULL;
 
@@ -35,7 +51,7 @@ WHERE owner_id IS NOT NULL;
 --   SELECT (SELECT count(*) FROM public.income_payment_allocations)
 --        = (SELECT count(*) FROM public.income_payments WHERE owner_id IS NOT NULL) AS ok;
 --   SELECT COALESCE((SELECT sum(amount) FROM public.income_payment_allocations), 0)
---        = COALESCE((SELECT sum(COALESCE(amount,0)) FROM public.income_payments WHERE owner_id IS NOT NULL), 0) AS ok;
+--        = COALESCE((SELECT sum(amount) FROM public.income_payments WHERE owner_id IS NOT NULL), 0) AS ok;
 --   SELECT NOT EXISTS (
 --     SELECT 1 FROM public.income_payment_allocations a
 --     JOIN public.income_payments p ON p.id = a.payment_id
