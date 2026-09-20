@@ -257,6 +257,11 @@ export function allocationStatus(
   allocations: readonly AllocationLike[],
 ): AllocationStatus {
   if (allocations.length === 0) return "unallocated";
+  // An unknown total or an unknown slice means the split is not settled --
+  // without this, remainderOf's null-to-zero coercion makes "nothing is known"
+  // look identical to "it balances".
+  if (paymentAmount === null) return "partial";
+  if (allocations.some((a) => a.amount === null)) return "partial";
   return Math.abs(remainderOf(paymentAmount, allocations)) < CENT_TOLERANCE
     ? "allocated"
     : "partial";
@@ -584,7 +589,9 @@ export function AllocationEditor({
           >
             {status === "allocated"
               ? "Fully allocated"
-              : `Unallocated: ${formatMoney(remainder, currency)}`}
+              : paymentAmount === null || allocations.some((a) => a.amount === null)
+                ? "Amount unknown"
+                : `Unallocated: ${formatMoney(remainder, currency)}`}
           </span>
         )}
       </div>
