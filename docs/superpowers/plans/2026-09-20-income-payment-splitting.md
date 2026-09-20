@@ -747,7 +747,11 @@ const saveAllocations = useMutation({
     delete scalarFields.owner_id;       // owner now lives in allocations
     delete scalarFields.condominium_id; // and the mirror is set by the RPC
 
-    if (Object.keys(scalarFields).length > 0) {
+    // Both writes are gated on real change. editor.start seeds EVERY editable
+    // field, so an ungated save would rewrite allocations on any edit -- and
+    // since the RPC is DELETE+INSERT, that both churns allocation ids and can
+    // silently overwrite a split another tab added while this draft was open.
+    if (!draftIsUnchanged(payment, scalarFields)) {
       const { error } = await supabase
         .from("income_payments")
         .update(scalarFields)
@@ -755,20 +759,24 @@ const saveAllocations = useMutation({
       if (error) throw error;
     }
 
-    const { error: rpcError } = await supabase.rpc("set_payment_allocations", {
-      p_payment_id: payment.id,
-      p_allocations: allocations
-        .filter((a) => a.owner_id !== null || a.amount !== null)
-        .map((a) => ({
-          owner_id: a.owner_id,
-          condominium_id: a.condominium_id,
-          amount: a.amount,
-        })),
-    });
-    if (rpcError) throw rpcError;
+    if (!allocationsUnchanged(originalAllocations, allocations)) {
+      const { error: rpcError } = await supabase.rpc("set_payment_allocations", {
+        p_payment_id: payment.id,
+        p_allocations: allocations
+          .filter((a) => a.owner_id !== null || a.amount !== null)
+          .map((a) => ({
+            owner_id: a.owner_id,
+            condominium_id: a.condominium_id,
+            amount: a.amount,
+          })),
+      });
+      if (rpcError) throw rpcError;
+    }
   },
-  onSuccess: () => {
-    cancelEdit();
+  // Only leave edit mode if the editor is still on the row that was saved --
+  // otherwise a slow save on row A wipes a draft just opened on row B.
+  onSuccess: (_data, variables) => {
+    if (editor.editingId === variables.payment.id) cancelEdit();
     qc.invalidateQueries({ queryKey: ["income_payments"] });
     qc.invalidateQueries({ queryKey: ["income_payment_allocations"] });
   },
@@ -776,7 +784,26 @@ const saveAllocations = useMutation({
 });
 
 function saveRow(p: PaymentRow) {
-  saveAllocations.mutate({ payment: p, fields: editor.draft, allocations: allocationDraft });
+  saveAllocations.mutate({
+    payment: p,
+    fields: editor.draft,
+    allocations: allocationDraft,
+    originalAllocations: allocationsByPayment.get(p.id) ?? [],
+  });
+}
+
+/** Compare by content, never by AllocationDraft.key -- `key` holds the DB id
+ *  for a loaded row but a fresh random UUID for an unsaved one. */
+function allocationsUnchanged(original: AllocationRow[], draft: AllocationDraft[]): boolean {
+  if (original.length !== draft.length) return false;
+  return original.every((o, i) => {
+    const d = draft[i];
+    return (
+      d.owner_id === o.owner_id &&
+      d.condominium_id === o.condominium_id &&
+      d.amount === o.amount
+    );
+  });
 }
 ```
 
@@ -808,7 +835,7 @@ const assignOwner = useMutation({
 });
 ```
 
-Apply the same change to `bulkAssign`: loop the selected ids through the RPC rather than a single `.in()` update.
+Apply the same change to `bulkAssign`: loop the selected ids through the RPC rather than a single `.in()` update. Each call commits independently, so `onError` must invalidate both queries too — otherwise a failure at item 3 of 10 leaves the table showing stale state for the two that already succeeded.
 
 - [ ] **Step 5: Pass allocations through `paymentProps`**
 
