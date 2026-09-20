@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { allocationStatus, allocatedTotal, remainderOf, needsAttention } from "./income-allocations";
+import {
+  allocationStatus,
+  allocatedTotal,
+  remainderOf,
+  needsAttention,
+  hasUnknownAmount,
+} from "./income-allocations";
 
 const alloc = (amount: number) => ({ amount });
 
@@ -88,5 +94,19 @@ describe("needsAttention", () => {
 
   it("is true when nothing at all is known", () => {
     expect(needsAttention(null, [{ amount: null }])).toBe(true);
+  });
+});
+
+describe("hasUnknownAmount", () => {
+  it("is true when the payment amount is unknown", () => {
+    expect(hasUnknownAmount(null, [alloc(300)])).toBe(true);
+  });
+
+  it("is true when any slice is unknown", () => {
+    expect(hasUnknownAmount(550, [alloc(300), { amount: null }])).toBe(true);
+  });
+
+  it("is false when everything is known", () => {
+    expect(hasUnknownAmount(550, [alloc(550)])).toBe(false);
   });
 });

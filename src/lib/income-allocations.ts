@@ -21,6 +21,15 @@ export function remainderOf(
   return (paymentAmount ?? 0) - allocatedTotal(allocations);
 }
 
+/** True when the total or any slice is still unknown, so no remainder can be
+ *  computed honestly. Callers show "amount unknown" rather than a figure. */
+export function hasUnknownAmount(
+  paymentAmount: number | null,
+  allocations: readonly AllocationLike[],
+): boolean {
+  return paymentAmount === null || allocations.some((a) => a.amount === null);
+}
+
 /** "unallocated" with no rows; otherwise "allocated" only if the total and every slice are known and balance, else "partial" -- an unknown amount is never treated as settled. */
 export function allocationStatus(
   paymentAmount: number | null,
@@ -30,8 +39,7 @@ export function allocationStatus(
   // An unknown total or an unknown slice means the split is not settled --
   // without this, remainderOf's null-to-zero coercion makes "nothing is known"
   // look identical to "it balances".
-  if (paymentAmount === null) return "partial";
-  if (allocations.some((a) => a.amount === null)) return "partial";
+  if (hasUnknownAmount(paymentAmount, allocations)) return "partial";
   return Math.abs(remainderOf(paymentAmount, allocations)) < CENT_TOLERANCE
     ? "allocated"
     : "partial";
