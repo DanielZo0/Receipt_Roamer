@@ -207,6 +207,16 @@ function IncomePage() {
   }, [allocations]);
 
   const condoName = (id: string | null) => (id ? associations?.find((a) => a.id === id)?.name ?? "—" : "—");
+  /** The payment's own condominium_id is only a mirror of the single-allocation
+   *  case -- NULL for any split -- so derive the label from the allocations
+   *  themselves, which is where the association actually lives now. */
+  const condoNameForPayment = (p: PaymentRow, allocs: AllocationRow[]) => {
+    const ids = [...new Set(allocs.map((a) => a.condominium_id).filter((id): id is string => !!id))];
+    if (ids.length === 0) return condoName(p.condominium_id);
+    if (ids.length === 1) return condoName(ids[0]);
+    return `${ids.length} associations`;
+  };
+
   const ownerName = (id: string | null) => (id ? owners?.find((o) => o.id === id)?.name ?? "—" : "—");
 
   const filteredPayments = useMemo(
@@ -607,7 +617,7 @@ function IncomePage() {
             payment: p,
             owners: (owners ?? []) as OwnerLite[],
             associations: (associations ?? []) as AssociationLite[],
-            condoName: condoName(p.condominium_id),
+            condoName: condoNameForPayment(p, allocationsByPayment.get(p.id) ?? []),
             selected: selected.has(p.id),
             onToggleSelect: () => toggleRow(p.id),
             isEditing: editor.isEditing(p.id),

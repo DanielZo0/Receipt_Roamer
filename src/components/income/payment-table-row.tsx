@@ -130,7 +130,7 @@ export function PaymentTableRow({
             // against a number the user just deleted.
             paymentAmount={draft.amount === undefined ? p.amount : draft.amount}
             currency={draft.currency === undefined ? p.currency : draft.currency}
-            preferredCondominiumId={p.condominium_id}
+            preferredCondominiumId={allocations[0]?.condominium_id ?? p.condominium_id}
           />
         ) : (
           <>
@@ -140,7 +140,7 @@ export function PaymentTableRow({
                 associations={associations}
                 value={allocations[0]?.owner_id ?? null}
                 onChange={onAssignOwner}
-                preferredCondominiumId={p.condominium_id}
+                preferredCondominiumId={allocations[0]?.condominium_id ?? p.condominium_id}
               />
             ) : (
               <div className="space-y-0.5">
