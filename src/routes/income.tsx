@@ -25,6 +25,7 @@ import {
   type PaymentRow,
   draftFromRow,
 } from "@/lib/income-types";
+import { needsAttention } from "@/lib/income-allocations";
 import { formatIsoDateDmy } from "@/lib/format";
 import { draftIsUnchanged, useRowEditor } from "@/lib/use-row-editor";
 import { supabase } from "@/integrations/supabase/client";
@@ -209,8 +210,11 @@ function IncomePage() {
   const ownerName = (id: string | null) => (id ? owners?.find((o) => o.id === id)?.name ?? "—" : "—");
 
   const filteredPayments = useMemo(
-    () => (payments ?? []).filter((p) => !showUnmatchedOnly || !p.owner_id),
-    [payments, showUnmatchedOnly],
+    () =>
+      (payments ?? []).filter(
+        (p) => !showUnmatchedOnly || needsAttention(p.amount, allocationsByPayment.get(p.id) ?? []),
+      ),
+    [payments, showUnmatchedOnly, allocationsByPayment],
   );
 
   const editor = useRowEditor<PaymentRow>();
@@ -459,16 +463,46 @@ function IncomePage() {
       toast.info("Nothing new to export");
       return;
     }
-    const headers = ["Date", "Payer", "Amount", "Currency", "Reference", "Condo", "Owner"];
-    const rows = toExport.map((p) => [
-      p.payment_date ? formatIsoDateDmy(p.payment_date) : "",
-      p.payer_name ?? "",
-      p.amount?.toString() ?? "",
-      p.currency ?? "",
-      p.reference_string ?? "",
-      condoName(p.condominium_id),
-      ownerName(p.owner_id),
-    ]);
+    const headers = [
+      "Date",
+      "Payer",
+      "Payment Amount",
+      "Allocated Amount",
+      "Currency",
+      "Reference",
+      "Condo",
+      "Owner",
+    ];
+    // A split payment occupies several rows that repeat the payment total, so
+    // summing "Payment Amount" would double-count it. "Allocated Amount" is the
+    // per-association figure. The column names are distinct for that reason.
+    const rows = toExport.flatMap((p) => {
+      const allocs = allocationsByPayment.get(p.id) ?? [];
+      if (allocs.length === 0) {
+        return [
+          [
+            p.payment_date ? formatIsoDateDmy(p.payment_date) : "",
+            p.payer_name ?? "",
+            p.amount?.toString() ?? "",
+            "",
+            p.currency ?? "",
+            p.reference_string ?? "",
+            condoName(p.condominium_id),
+            "",
+          ],
+        ];
+      }
+      return allocs.map((a) => [
+        p.payment_date ? formatIsoDateDmy(p.payment_date) : "",
+        p.payer_name ?? "",
+        p.amount?.toString() ?? "",
+        a.amount?.toString() ?? "",
+        p.currency ?? "",
+        p.reference_string ?? "",
+        condoName(a.condominium_id),
+        ownerName(a.owner_id),
+      ]);
+    });
     const csv = [headers, ...rows]
       .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
       .join("\n");
@@ -617,7 +651,11 @@ function IncomePage() {
                       showUnmatchedOnly ? "bg-background shadow-sm" : "text-muted-foreground"
                     }`}
                   >
-                    Unmatched ({payments?.filter((p) => !p.owner_id).length ?? 0})
+                    Needs attention (
+                    {payments?.filter((p) =>
+                      needsAttention(p.amount, allocationsByPayment.get(p.id) ?? []),
+                    ).length ?? 0}
+                    )
                   </button>
                 </div>
 
@@ -693,7 +731,7 @@ function IncomePage() {
                     ) : filtered.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                          {showUnmatchedOnly ? "No unmatched payments." : "No income payments yet."}
+                          {showUnmatchedOnly ? "Nothing needs attention." : "No income payments yet."}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -707,7 +745,7 @@ function IncomePage() {
                 <p className="text-center text-muted-foreground py-8 md:hidden">Loading…</p>
               ) : filtered.length === 0 ? (
                 <p className="text-center text-muted-foreground py-8 md:hidden">
-                  {showUnmatchedOnly ? "No unmatched payments." : "No income payments yet."}
+                  {showUnmatchedOnly ? "Nothing needs attention." : "No income payments yet."}
                 </p>
               ) : (
                 <MobileCardList>
