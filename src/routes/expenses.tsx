@@ -26,13 +26,13 @@ import { AppShell } from "@/components/AppShell";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Download, FileText, ExternalLink, Info } from "lucide-react";
-import {
-  MobileCardList,
-  MobileCard,
-  MobileCardHeader,
-  MobileCardLabel,
-} from "@/components/ui/responsive-table";
+import { Download, Info } from "lucide-react";
+import { MobileCardList } from "@/components/ui/responsive-table";
+import { ExpenseMobileCard } from "@/components/expenses/expense-mobile-card";
+import { ExpenseTableRow } from "@/components/expenses/expense-table-row";
+import { EXPENSE_EDITABLE_FIELDS, type ExpenseRow } from "@/lib/expense-types";
+import { formatIsoDateDmy } from "@/lib/format";
+import { draftIsUnchanged, useRowEditor } from "@/lib/use-row-editor";
 
 export const Route = createFileRoute("/expenses")({
   head: () => ({
@@ -49,26 +49,6 @@ function formatDateForFilename(d: Date): string {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   return `${dd}-${mm}-${d.getFullYear()}`;
 }
-
-function formatIsoDateDmy(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return y && m && d ? `${d}-${m}-${y}` : iso;
-}
-
-type ExpenseRow = {
-  id: string;
-  association_id: string | null;
-  supplier: string | null;
-  expense_date: string | null;
-  amount: number | null;
-  currency: string | null;
-  category: string | null;
-  reference_number: string | null;
-  file_path: string | null;
-  file_mime: string | null;
-  exported_at: string | null;
-  created_at: string;
-};
 
 type ValidationIssue = {
   field: string;
@@ -160,6 +140,8 @@ function ExpensesPage() {
   const assocName = (id: string | null) =>
     id ? (associations?.find((a) => a.id === id)?.name ?? "—") : "—";
 
+  const editor = useRowEditor<ExpenseRow>();
+
   const update = useMutation({
     mutationFn: async (row: Partial<ExpenseRow> & { id: string }) => {
       const { id, ...rest } = row;
@@ -186,6 +168,7 @@ function ExpensesPage() {
       return { original, rest };
     },
     onSuccess: ({ original, rest }) => {
+      editor.cancel();
       qc.invalidateQueries({ queryKey: ["expenses"] });
 
       // If the association was corrected, offer to save it as a learned rule.
@@ -350,6 +333,36 @@ function ExpensesPage() {
     }
   }
 
+  function saveRow(e: ExpenseRow) {
+    if (draftIsUnchanged(e, editor.draft)) {
+      editor.cancel();
+      return;
+    }
+    update.mutate({ id: e.id, ...editor.draft });
+  }
+
+  const rowProps = (e: ExpenseRow) => ({
+    expense: e,
+    associations: associations ?? [],
+    isEditing: editor.isEditing(e.id),
+    draft: editor.draft,
+    onChange: editor.set,
+    onEdit: () => editor.start(e, EXPENSE_EDITABLE_FIELDS),
+    onCancel: editor.cancel,
+    onSave: () => saveRow(e),
+    saving: update.isPending && editor.editingId === e.id,
+    onOpenFile: () => openFile(e.file_path),
+    onDelete: () => del.mutate(e),
+    details: (
+      <ExtractionDetails
+        audit={auditByExpense.get(e.id) ?? null}
+        duplicateExpense={
+          expenses?.find((x) => x.id === auditByExpense.get(e.id)?.possible_duplicate_of) ?? null
+        }
+      />
+    ),
+  });
+
   async function openFile(path: string | null) {
     if (!path) return;
     const { data, error } = await supabase.storage.from("receipts").createSignedUrl(path, 60 * 5);
@@ -428,7 +441,6 @@ function ExpensesPage() {
                 <TableHead>Category</TableHead>
                 <TableHead>Reference</TableHead>
                 <TableHead>Association</TableHead>
-                <TableHead>File</TableHead>
                 <TableHead>Details</TableHead>
                 <TableHead></TableHead>
               </TableRow>
@@ -436,132 +448,18 @@ function ExpensesPage() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     Loading…
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     No expenses match.
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((e) => (
-                  <TableRow key={e.id}>
-                    <TableCell>
-                      <Input
-                        type="date"
-                        defaultValue={e.expense_date ?? ""}
-                        onBlur={(ev) =>
-                          ev.target.value !== (e.expense_date ?? "") &&
-                          update.mutate({ id: e.id, expense_date: ev.target.value || null })
-                        }
-                        className="w-28"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        defaultValue={e.supplier ?? ""}
-                        onBlur={(ev) =>
-                          ev.target.value !== (e.supplier ?? "") &&
-                          update.mutate({ id: e.id, supplier: ev.target.value || null })
-                        }
-                        className="min-w-28"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          defaultValue={e.amount ?? ""}
-                          onBlur={(ev) => {
-                            const v = ev.target.value ? Number(ev.target.value) : null;
-                            if (v !== e.amount) update.mutate({ id: e.id, amount: v });
-                          }}
-                          className="w-20"
-                        />
-                        <Input
-                          defaultValue={e.currency ?? ""}
-                          onBlur={(ev) =>
-                            ev.target.value !== (e.currency ?? "") &&
-                            update.mutate({ id: e.id, currency: ev.target.value || null })
-                          }
-                          className="w-14"
-                          placeholder="EUR"
-                        />
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        defaultValue={e.category ?? ""}
-                        onBlur={(ev) =>
-                          ev.target.value !== (e.category ?? "") &&
-                          update.mutate({ id: e.id, category: ev.target.value || null })
-                        }
-                        className="min-w-20"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        defaultValue={e.reference_number ?? ""}
-                        onBlur={(ev) =>
-                          ev.target.value !== (e.reference_number ?? "") &&
-                          update.mutate({ id: e.id, reference_number: ev.target.value || null })
-                        }
-                        className="min-w-20"
-                        placeholder="Invoice #"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={e.association_id ?? "none"}
-                        onValueChange={(v) =>
-                          update.mutate({ id: e.id, association_id: v === "none" ? null : v })
-                        }
-                      >
-                        <SelectTrigger className="min-w-32">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">— unassigned —</SelectItem>
-                          {associations?.map((a) => (
-                            <SelectItem key={a.id} value={a.id}>
-                              {a.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      {e.file_path ? (
-                        <Button size="icon" variant="ghost" onClick={() => openFile(e.file_path)}>
-                          <ExternalLink className="h-4 w-4" />
-                        </Button>
-                      ) : (
-                        <FileText className="h-4 w-4 text-muted-foreground" />
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <ExtractionDetails
-                        audit={auditByExpense.get(e.id) ?? null}
-                        duplicateExpense={
-                          expenses?.find(
-                            (x) => x.id === auditByExpense.get(e.id)?.possible_duplicate_of,
-                          ) ?? null
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <ConfirmDeleteButton
-                        title="Delete this expense?"
-                        description={`This will permanently remove ${e.supplier ?? "this expense"}${e.file_path ? " and its attached receipt file" : ""}. This can't be undone.`}
-                        onConfirm={() => del.mutate(e)}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))
+                filtered.map((e) => <ExpenseTableRow key={e.id} {...rowProps(e)} />)
               )}
             </TableBody>
           </Table>
@@ -574,127 +472,7 @@ function ExpensesPage() {
         ) : (
           <MobileCardList>
             {filtered.map((e) => (
-              <MobileCard key={e.id}>
-                <MobileCardHeader>
-                  <Input
-                    type="date"
-                    defaultValue={e.expense_date ?? ""}
-                    onBlur={(ev) =>
-                      ev.target.value !== (e.expense_date ?? "") &&
-                      update.mutate({ id: e.id, expense_date: ev.target.value || null })
-                    }
-                    className="flex-1"
-                  />
-                  <div className="flex gap-1 flex-shrink-0">
-                    <Input
-                      type="number"
-                      step="0.01"
-                      defaultValue={e.amount ?? ""}
-                      onBlur={(ev) => {
-                        const v = ev.target.value ? Number(ev.target.value) : null;
-                        if (v !== e.amount) update.mutate({ id: e.id, amount: v });
-                      }}
-                      className="w-20"
-                    />
-                    <Input
-                      defaultValue={e.currency ?? ""}
-                      onBlur={(ev) =>
-                        ev.target.value !== (e.currency ?? "") &&
-                        update.mutate({ id: e.id, currency: ev.target.value || null })
-                      }
-                      className="w-14"
-                      placeholder="EUR"
-                    />
-                  </div>
-                </MobileCardHeader>
-
-                <div>
-                  <MobileCardLabel>Supplier</MobileCardLabel>
-                  <Input
-                    defaultValue={e.supplier ?? ""}
-                    onBlur={(ev) =>
-                      ev.target.value !== (e.supplier ?? "") &&
-                      update.mutate({ id: e.id, supplier: ev.target.value || null })
-                    }
-                    className="w-full mt-1 font-medium"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <MobileCardLabel>Category</MobileCardLabel>
-                    <Input
-                      defaultValue={e.category ?? ""}
-                      onBlur={(ev) =>
-                        ev.target.value !== (e.category ?? "") &&
-                        update.mutate({ id: e.id, category: ev.target.value || null })
-                      }
-                      className="w-full mt-1"
-                    />
-                  </div>
-                  <div>
-                    <MobileCardLabel>Reference</MobileCardLabel>
-                    <Input
-                      defaultValue={e.reference_number ?? ""}
-                      onBlur={(ev) =>
-                        ev.target.value !== (e.reference_number ?? "") &&
-                        update.mutate({ id: e.id, reference_number: ev.target.value || null })
-                      }
-                      className="w-full mt-1"
-                      placeholder="Invoice #"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <MobileCardLabel>Association</MobileCardLabel>
-                  <Select
-                    value={e.association_id ?? "none"}
-                    onValueChange={(v) =>
-                      update.mutate({ id: e.id, association_id: v === "none" ? null : v })
-                    }
-                  >
-                    <SelectTrigger className="w-full mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">— unassigned —</SelectItem>
-                      {associations?.map((a) => (
-                        <SelectItem key={a.id} value={a.id}>
-                          {a.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center justify-between pt-1 border-t">
-                  <ExtractionDetails
-                    audit={auditByExpense.get(e.id) ?? null}
-                    duplicateExpense={
-                      expenses?.find(
-                        (x) => x.id === auditByExpense.get(e.id)?.possible_duplicate_of,
-                      ) ?? null
-                    }
-                  />
-                  <div className="flex gap-1">
-                    {e.file_path ? (
-                      <Button size="icon" variant="ghost" onClick={() => openFile(e.file_path)}>
-                        <ExternalLink className="h-4 w-4" />
-                      </Button>
-                    ) : (
-                      <Button size="icon" variant="ghost" disabled>
-                        <FileText className="h-4 w-4 text-muted-foreground" />
-                      </Button>
-                    )}
-                    <ConfirmDeleteButton
-                      title="Delete this expense?"
-                      description={`This will permanently remove ${e.supplier ?? "this expense"}${e.file_path ? " and its attached receipt file" : ""}. This can't be undone.`}
-                      onConfirm={() => del.mutate(e)}
-                    />
-                  </div>
-                </div>
-              </MobileCard>
+              <ExpenseMobileCard key={e.id} {...rowProps(e)} />
             ))}
           </MobileCardList>
         )}
