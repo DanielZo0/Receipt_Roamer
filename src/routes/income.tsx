@@ -18,9 +18,15 @@ import { OwnerCombobox, type OwnerLite, type AssociationLite } from "@/component
 import { MobileCardList } from "@/components/ui/responsive-table";
 import { PaymentMobileCard } from "@/components/income/payment-mobile-card";
 import { PaymentTableRow } from "@/components/income/payment-table-row";
-import { PAYMENT_EDITABLE_FIELDS, type PaymentRow } from "@/lib/income-types";
+import {
+  PAYMENT_EDITABLE_FIELDS,
+  type AllocationDraft,
+  type AllocationRow,
+  type PaymentRow,
+  draftFromRow,
+} from "@/lib/income-types";
 import { formatIsoDateDmy } from "@/lib/format";
-import { draftIsUnchanged, useRowEditor } from "@/lib/use-row-editor";
+import { useRowEditor } from "@/lib/use-row-editor";
 import { supabase } from "@/integrations/supabase/client";
 import { extractAndSaveIncomePayment } from "@/lib/income.functions";
 import { toast } from "sonner";
@@ -163,6 +169,27 @@ function IncomePage() {
     },
   });
 
+  const { data: allocations } = useQuery({
+    queryKey: ["income_payment_allocations"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("income_payment_allocations")
+        .select("*")
+        .order("created_at");
+      if (error) throw error;
+      return data as AllocationRow[];
+    },
+  });
+
+  const allocationsByPayment = useMemo(() => {
+    const map = new Map<string, AllocationRow[]>();
+    for (const a of allocations ?? []) {
+      if (!map.has(a.payment_id)) map.set(a.payment_id, []);
+      map.get(a.payment_id)!.push(a);
+    }
+    return map;
+  }, [allocations]);
+
   const condoName = (id: string | null) => (id ? associations?.find((a) => a.id === id)?.name ?? "—" : "—");
   const ownerName = (id: string | null) => (id ? owners?.find((o) => o.id === id)?.name ?? "—" : "—");
 
@@ -173,35 +200,52 @@ function IncomePage() {
 
   const editor = useRowEditor<PaymentRow>();
 
-  const update = useMutation({
-    mutationFn: async (row: Partial<PaymentRow> & { id: string }) => {
-      const { id, ...rest } = row;
-      if (rest.owner_id) {
-        const owner = owners?.find((o) => o.id === rest.owner_id);
-        (rest as Partial<PaymentRow>).condominium_id = owner?.condominium_id ?? null;
-      }
-      const { error } = await supabase.from("income_payments").update(rest).eq("id", id);
+  const [allocationDraft, setAllocationDraft] = useState<AllocationDraft[]>([]);
+
+  function startEdit(p: PaymentRow) {
+    editor.start(p, PAYMENT_EDITABLE_FIELDS);
+    setAllocationDraft((allocationsByPayment.get(p.id) ?? []).map(draftFromRow));
+  }
+
+  function cancelEdit() {
+    editor.cancel();
+    setAllocationDraft([]);
+  }
+
+  const assignOwner = useMutation({
+    mutationFn: async ({ payment, ownerId }: { payment: PaymentRow; ownerId: string | null }) => {
+      const { error } = await supabase.rpc("set_payment_allocations", {
+        p_payment_id: payment.id,
+        p_allocations: ownerId
+          ? [{ owner_id: ownerId, condominium_id: null, amount: payment.amount }]
+          : [],
+      });
       if (error) throw error;
     },
     onSuccess: () => {
-      editor.cancel();
       qc.invalidateQueries({ queryKey: ["income_payments"] });
+      qc.invalidateQueries({ queryKey: ["income_payment_allocations"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const bulkAssign = useMutation({
     mutationFn: async ({ ids, ownerId }: { ids: string[]; ownerId: string | null }) => {
-      const owner = ownerId ? owners?.find((o) => o.id === ownerId) : undefined;
-      const condominium_id = ownerId ? owner?.condominium_id ?? null : null;
-      const { error } = await supabase
-        .from("income_payments")
-        .update({ owner_id: ownerId, condominium_id })
-        .in("id", ids);
-      if (error) throw error;
+      const byId = new Map((payments ?? []).map((p) => [p.id, p]));
+      for (const id of ids) {
+        const payment = byId.get(id);
+        const { error } = await supabase.rpc("set_payment_allocations", {
+          p_payment_id: id,
+          p_allocations: ownerId
+            ? [{ owner_id: ownerId, condominium_id: null, amount: payment?.amount ?? null }]
+            : [],
+        });
+        if (error) throw error;
+      }
     },
     onSuccess: (_data, { ids }) => {
       qc.invalidateQueries({ queryKey: ["income_payments"] });
+      qc.invalidateQueries({ queryKey: ["income_payment_allocations"] });
       setSelected(new Set());
       toast.success(`Assigned ${ids.length} payment${ids.length === 1 ? "" : "s"}`);
     },
@@ -309,12 +353,50 @@ function IncomePage() {
     e.target.value = "";
   }
 
+  const saveAllocations = useMutation({
+    mutationFn: async ({
+      payment,
+      fields,
+      allocations,
+    }: {
+      payment: PaymentRow;
+      fields: Partial<PaymentRow>;
+      allocations: AllocationDraft[];
+    }) => {
+      const scalarFields = { ...fields };
+      delete scalarFields.owner_id; // owner now lives in allocations
+      delete scalarFields.condominium_id; // and the mirror is set by the RPC
+
+      if (Object.keys(scalarFields).length > 0) {
+        const { error } = await supabase
+          .from("income_payments")
+          .update(scalarFields)
+          .eq("id", payment.id);
+        if (error) throw error;
+      }
+
+      const { error: rpcError } = await supabase.rpc("set_payment_allocations", {
+        p_payment_id: payment.id,
+        p_allocations: allocations
+          .filter((a) => a.owner_id !== null || a.amount !== null)
+          .map((a) => ({
+            owner_id: a.owner_id,
+            condominium_id: a.condominium_id,
+            amount: a.amount,
+          })),
+      });
+      if (rpcError) throw rpcError;
+    },
+    onSuccess: () => {
+      cancelEdit();
+      qc.invalidateQueries({ queryKey: ["income_payments"] });
+      qc.invalidateQueries({ queryKey: ["income_payment_allocations"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   function saveRow(p: PaymentRow) {
-    if (draftIsUnchanged(p, editor.draft)) {
-      editor.cancel();
-      return;
-    }
-    update.mutate({ id: p.id, ...editor.draft });
+    saveAllocations.mutate({ payment: p, fields: editor.draft, allocations: allocationDraft });
   }
 
   async function openFile(path: string | null) {
@@ -453,14 +535,18 @@ function IncomePage() {
             isEditing: editor.isEditing(p.id),
             draft: editor.draft,
             onChange: editor.set,
-            onEdit: () => editor.start(p, PAYMENT_EDITABLE_FIELDS),
-            onCancel: editor.cancel,
+            onEdit: () => startEdit(p),
+            onCancel: cancelEdit,
             onSave: () => saveRow(p),
-            saving: update.isPending && editor.editingId === p.id,
+            saving: saveAllocations.isPending && editor.editingId === p.id,
             onAssignOwner: (ownerId: string | null) =>
-              update.mutate({ id: p.id, owner_id: ownerId }),
+              assignOwner.mutate({ payment: p, ownerId }),
             onOpenFile: () => openFile(p.file_path),
             onDelete: () => del.mutate(p),
+            allocations: allocationsByPayment.get(p.id) ?? [],
+            allocationDraft,
+            onAllocationChange: setAllocationDraft,
+            ownerName,
           });
 
           return (
