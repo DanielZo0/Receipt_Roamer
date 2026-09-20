@@ -63,6 +63,9 @@ export function PaymentMobileCard({
   ownerName,
 }: PaymentRowProps) {
   const deleteDescription = `This will permanently remove the payment from ${p.payer_name ?? "this payer"}${p.file_path ? " and its attached file" : ""}. This can't be undone.`;
+  // p.owner_id is only a mirror of the single-allocation case -- it is NULL for
+  // any split, so it cannot answer "does this need attention?".
+  const attention = needsAttention(p.amount, allocations);
 
   const actions = (
     <PaymentActions
@@ -80,7 +83,7 @@ export function PaymentMobileCard({
 
   if (!isEditing) {
     return (
-      <MobileCard className={!p.owner_id ? "bg-amber-500/5" : undefined}>
+      <MobileCard className={attention ? "bg-amber-500/5" : undefined}>
         <MobileCardHeader>
           <div className="flex items-center gap-2 min-w-0">
             <Checkbox
@@ -100,7 +103,7 @@ export function PaymentMobileCard({
         <div className="flex items-center justify-between gap-2">
           <span className="font-medium truncate">{p.payer_name ?? "—"}</span>
           {p.match_confidence != null && (
-            <Badge variant={p.owner_id ? "outline" : "destructive"} className="flex-shrink-0">
+            <Badge variant={attention ? "destructive" : "outline"} className="flex-shrink-0">
               {(p.match_confidence * 100).toFixed(0)}%
             </Badge>
           )}
@@ -161,7 +164,7 @@ export function PaymentMobileCard({
   }
 
   return (
-    <MobileCard className={!p.owner_id ? "bg-amber-500/5" : undefined}>
+    <MobileCard className={attention ? "bg-amber-500/5" : undefined}>
       <MobileCardHeader>
         <Input
           type="date"

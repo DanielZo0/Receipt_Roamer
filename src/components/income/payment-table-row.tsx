@@ -32,6 +32,9 @@ export function PaymentTableRow({
   ownerName,
 }: PaymentRowProps) {
   const deleteDescription = `This will permanently remove the payment from ${p.payer_name ?? "this payer"}${p.file_path ? " and its attached file" : ""}. This can't be undone.`;
+  // p.owner_id is only a mirror of the single-allocation case -- it is NULL for
+  // any split, so it cannot answer "does this need attention?".
+  const attention = needsAttention(p.amount, allocations);
 
   const actions = (
     <PaymentActions
@@ -48,7 +51,7 @@ export function PaymentTableRow({
   );
 
   return (
-    <TableRow className={!p.owner_id ? "bg-amber-500/5" : undefined}>
+    <TableRow className={attention ? "bg-amber-500/5" : undefined}>
       <TableCell>
         <Checkbox
           checked={selected}
@@ -163,7 +166,7 @@ export function PaymentTableRow({
       </TableCell>
       <TableCell>
         {p.match_confidence != null ? (
-          <Badge variant={p.owner_id ? "outline" : "destructive"}>
+          <Badge variant={attention ? "destructive" : "outline"}>
             {(p.match_confidence * 100).toFixed(0)}%
           </Badge>
         ) : (
