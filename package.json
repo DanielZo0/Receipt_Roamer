@@ -13,6 +13,7 @@
     "test": "vitest run",
     "format": "prettier --write .",
     "db:check": "node scripts/check-schema.mjs",
+    "db:apply": "node scripts/apply-migrations.mjs",
     "sync:association-names": "node scripts/sync-association-names.mjs",
     "sync:condotracker": "node scripts/sync-from-condotracker.mjs"
   },

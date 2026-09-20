@@ -15,6 +15,16 @@
  *     CondoTracker never has to know about Receipt Roamer's id space.
  *   - `.server.ts` suffix is load-bearing: this module imports the service-role
  *     Supabase client and must never reach the client bundle.
+ *   - Every item carries a `sourceGroupId`. For income that is the payment id
+ *     (even when the payment is split into several allocation items); for an
+ *     expense it is just the expense's own id, since expenses are never split.
+ *     The dedup key CondoTracker keys on is still (source_system, source_id),
+ *     but the agreed contract is supersede-by-group: when a payment's set of
+ *     items changes shape -- a split is created, re-split, or cleared -- every
+ *     item CondoTracker previously staged for that group should be replaced by
+ *     the new set, not merged with it. Prefix-matching source_id is fragile
+ *     (ids can collide on separators), so the group id is sent explicitly
+ *     instead of being inferred by CondoTracker.
  */
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
@@ -28,6 +38,7 @@ export const MAX_LIMIT = 500;
 
 export interface FeedItem {
   sourceId: string;
+  sourceGroupId: string;
   sourceKind: "expense" | "income";
   condotrackerCondominiumId: string | null;
   amount: number | null;
@@ -86,12 +97,12 @@ export async function getPendingForCondoTracker(
       .order("created_at", { ascending: true })
       .limit(perStream),
     supabaseAdmin
-      .from("income_payments")
+      .from("condotracker_income_feed")
       .select(
-        "id, amount, currency, payer_name, payment_date, reference_string, match_confidence, match_signals, file_path, file_mime, created_at, associations(condotracker_id), owners(condotracker_id)",
+        "source_id, source_group_id, amount, currency, payer_name, payment_date, reference_string, match_confidence, match_signals, file_path, file_mime, source_created_at, condotracker_condominium_id, condotracker_owner_id",
       )
-      .gte("created_at", since)
-      .order("created_at", { ascending: true })
+      .gte("source_created_at", since)
+      .order("source_created_at", { ascending: true })
       .limit(perStream),
   ]);
 
@@ -104,6 +115,7 @@ export async function getPendingForCondoTracker(
 
   const expenses: FeedItem[] = (expensesResult.data ?? []).map((row) => ({
     sourceId: row.id,
+    sourceGroupId: row.id,
     sourceKind: "expense" as const,
     condotrackerCondominiumId: embeddedCondotrackerId(row.associations),
     amount: row.amount,
@@ -122,22 +134,26 @@ export async function getPendingForCondoTracker(
   }));
 
   const income: FeedItem[] = (incomeResult.data ?? []).map((row) => ({
-    sourceId: row.id,
+    // source_id/source_group_id come back typed as nullable because PostgREST
+    // can't express view-column nullability, but the view's CASE and ::text
+    // casts mean every row actually has both populated.
+    sourceId: row.source_id as string,
+    sourceGroupId: row.source_group_id as string,
     sourceKind: "income" as const,
-    condotrackerCondominiumId: embeddedCondotrackerId(row.associations),
+    condotrackerCondominiumId: row.condotracker_condominium_id,
     amount: row.amount,
     currency: row.currency,
     date: row.payment_date,
     supplier: row.payer_name,
     category: null,
     reference: row.reference_string,
-    condotrackerOwnerId: embeddedCondotrackerId(row.owners),
+    condotrackerOwnerId: row.condotracker_owner_id,
     ownerMatchConfidence: row.match_confidence,
     ownerMatchSignals: row.match_signals,
     filePath: row.file_path,
     fileMime: row.file_mime,
     fileUrl: null,
-    sourceCreatedAt: row.created_at,
+    sourceCreatedAt: row.source_created_at as string,
   }));
 
   // Merge both kinds into one created_at-ordered stream so a single cursor can

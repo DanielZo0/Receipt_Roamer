@@ -198,6 +198,58 @@ export type Database = {
           },
         ];
       };
+      income_payment_allocations: {
+        Row: {
+          id: string;
+          payment_id: string;
+          owner_id: string | null;
+          condominium_id: string | null;
+          amount: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          payment_id: string;
+          owner_id?: string | null;
+          condominium_id?: string | null;
+          amount?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          payment_id?: string;
+          owner_id?: string | null;
+          condominium_id?: string | null;
+          amount?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "income_payment_allocations_payment_id_fkey";
+            columns: ["payment_id"];
+            isOneToOne: false;
+            referencedRelation: "income_payments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "income_payment_allocations_owner_id_fkey";
+            columns: ["owner_id"];
+            isOneToOne: false;
+            referencedRelation: "owners";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "income_payment_allocations_condominium_id_fkey";
+            columns: ["condominium_id"];
+            isOneToOne: false;
+            referencedRelation: "associations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       income_payments: {
         Row: {
           id: string;
@@ -214,6 +266,7 @@ export type Database = {
           file_mime: string | null;
           raw_extraction: Json | null;
           exported_at: string | null;
+          allocations_updated_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -231,6 +284,7 @@ export type Database = {
           file_mime?: string | null;
           raw_extraction?: Json | null;
           exported_at?: string | null;
+          allocations_updated_at?: string | null;
           created_at?: string;
         };
         Update: {
@@ -248,6 +302,7 @@ export type Database = {
           file_mime?: string | null;
           raw_extraction?: Json | null;
           exported_at?: string | null;
+          allocations_updated_at?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -576,10 +631,31 @@ export type Database = {
       };
     };
     Views: {
-      [_ in never]: never;
+      condotracker_income_feed: {
+        Row: {
+          source_id: string | null;
+          source_group_id: string | null;
+          amount: number | null;
+          currency: string | null;
+          payment_date: string | null;
+          payer_name: string | null;
+          reference_string: string | null;
+          match_confidence: number | null;
+          match_signals: string[] | null;
+          file_path: string | null;
+          file_mime: string | null;
+          source_created_at: string | null;
+          condotracker_condominium_id: string | null;
+          condotracker_owner_id: string | null;
+        };
+        Relationships: [];
+      };
     };
     Functions: {
-      [_ in never]: never;
+      set_payment_allocations: {
+        Args: { p_payment_id: string; p_allocations: Json };
+        Returns: undefined;
+      };
     };
     Enums: {
       [_ in never]: never;

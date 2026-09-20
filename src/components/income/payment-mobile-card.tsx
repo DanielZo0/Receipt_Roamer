@@ -9,8 +9,10 @@ import {
   MobileCardRow,
 } from "@/components/ui/responsive-table";
 import { OwnerCombobox, type AssociationLite, type OwnerLite } from "@/components/OwnerCombobox";
+import { AllocationEditor } from "@/components/income/allocation-editor";
 import { PaymentActions } from "@/components/income/payment-actions";
-import type { PaymentRow } from "@/lib/income-types";
+import { hasUnknownAmount, needsAttention, remainderOf } from "@/lib/income-allocations";
+import type { AllocationDraft, AllocationRow, PaymentRow } from "@/lib/income-types";
 import { formatIsoDateDmy, formatMoney } from "@/lib/format";
 
 export type PaymentRowProps = {
@@ -32,6 +34,10 @@ export type PaymentRowProps = {
   onOpenFile: () => void;
   onDelete: () => void;
   extra?: ReactNode;
+  allocations: AllocationRow[];
+  allocationDraft: AllocationDraft[];
+  onAllocationChange: (next: AllocationDraft[]) => void;
+  ownerName: (id: string | null) => string;
 };
 
 export function PaymentMobileCard({
@@ -51,8 +57,15 @@ export function PaymentMobileCard({
   onAssignOwner,
   onOpenFile,
   onDelete,
+  allocations,
+  allocationDraft,
+  onAllocationChange,
+  ownerName,
 }: PaymentRowProps) {
   const deleteDescription = `This will permanently remove the payment from ${p.payer_name ?? "this payer"}${p.file_path ? " and its attached file" : ""}. This can't be undone.`;
+  // p.owner_id is only a mirror of the single-allocation case -- it is NULL for
+  // any split, so it cannot answer "does this need attention?".
+  const attention = needsAttention(p.amount, allocations);
 
   const actions = (
     <PaymentActions
@@ -70,7 +83,7 @@ export function PaymentMobileCard({
 
   if (!isEditing) {
     return (
-      <MobileCard className={!p.owner_id ? "bg-amber-500/5" : undefined}>
+      <MobileCard className={attention ? "bg-amber-500/5" : undefined}>
         <MobileCardHeader>
           <div className="flex items-center gap-2 min-w-0">
             <Checkbox
@@ -90,7 +103,7 @@ export function PaymentMobileCard({
         <div className="flex items-center justify-between gap-2">
           <span className="font-medium truncate">{p.payer_name ?? "—"}</span>
           {p.match_confidence != null && (
-            <Badge variant={p.owner_id ? "outline" : "destructive"} className="flex-shrink-0">
+            <Badge variant={attention ? "destructive" : "outline"} className="flex-shrink-0">
               {(p.match_confidence * 100).toFixed(0)}%
             </Badge>
           )}
@@ -107,16 +120,43 @@ export function PaymentMobileCard({
           <span className="min-w-0 truncate">{condoName}</span>
         </MobileCardRow>
 
-        {/* Assigning an owner is this page's main job, so it stays usable
-            without switching the card into edit mode. */}
-        <OwnerCombobox
-          owners={owners}
-          associations={associations}
-          value={p.owner_id}
-          onChange={onAssignOwner}
-          preferredCondominiumId={p.condominium_id}
-          className="w-full"
-        />
+        {allocations.length <= 1 ? (
+          // The common case keeps a directly-usable picker: assigning an owner
+          // is this page's main job and must not gain a click.
+          <OwnerCombobox
+            owners={owners}
+            associations={associations}
+            value={allocations[0]?.owner_id ?? null}
+            onChange={onAssignOwner}
+            preferredCondominiumId={allocations[0]?.condominium_id ?? p.condominium_id}
+            className="w-full"
+          />
+        ) : (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <MobileCardLabel>Split</MobileCardLabel>
+              <Badge variant="outline" className="flex-shrink-0">
+                {allocations.length} owners
+              </Badge>
+            </div>
+            {allocations.map((a) => (
+              <div key={a.id} className="flex items-center justify-between gap-2 text-sm">
+                <span className="min-w-0 truncate">{ownerName(a.owner_id)}</span>
+                <span className="flex-shrink-0 font-mono">
+                  {formatMoney(a.amount, p.currency)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {allocations.length > 0 && needsAttention(p.amount, allocations) && (
+          <p className="text-xs text-amber-600">
+            {hasUnknownAmount(p.amount, allocations)
+              ? "Amount unknown"
+              : `Unallocated: ${formatMoney(remainderOf(p.amount, allocations), p.currency)}`}
+          </p>
+        )}
 
         <div className="flex items-center justify-end gap-1 pt-1 border-t">{actions}</div>
       </MobileCard>
@@ -124,7 +164,7 @@ export function PaymentMobileCard({
   }
 
   return (
-    <MobileCard className={!p.owner_id ? "bg-amber-500/5" : undefined}>
+    <MobileCard className={attention ? "bg-amber-500/5" : undefined}>
       <MobileCardHeader>
         <Input
           type="date"
@@ -170,15 +210,21 @@ export function PaymentMobileCard({
       </div>
 
       <div>
-        <MobileCardLabel>Owner</MobileCardLabel>
-        <OwnerCombobox
-          owners={owners}
-          associations={associations}
-          value={draft.owner_id ?? null}
-          onChange={(ownerId) => onChange({ owner_id: ownerId })}
-          preferredCondominiumId={p.condominium_id}
-          className="w-full mt-1"
-        />
+        <MobileCardLabel>Owners</MobileCardLabel>
+        <div className="mt-1">
+          <AllocationEditor
+            allocations={allocationDraft}
+            onChange={onAllocationChange}
+            owners={owners}
+            associations={associations}
+            // `??` would treat a deliberately cleared field as "unset" and fall
+            // back to the stale value, so the remainder would be computed
+            // against a number the user just deleted.
+            paymentAmount={draft.amount === undefined ? p.amount : draft.amount}
+            currency={draft.currency === undefined ? p.currency : draft.currency}
+            preferredCondominiumId={allocations[0]?.condominium_id ?? p.condominium_id}
+          />
+        </div>
       </div>
 
       <div className="flex items-center justify-end gap-1 pt-1 border-t">{actions}</div>

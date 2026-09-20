@@ -8,7 +8,6 @@ import {
 } from "./payment-gemini";
 import { matchOwner, type OwnerRow } from "./owner-matching";
 import { type AssociationRow } from "./association-matching";
-import { RULES } from "./rules";
 
 export interface RunIncomeExtractionPipelineParams {
   fileName: string;
@@ -74,13 +73,18 @@ async function matchAndInsertPayment(
     throw new Error(error?.message ?? "Failed to insert income payment");
   }
 
-  if (ownerMatch.owner_id && ownerMatch.confidence >= RULES.owner_matching.combined_threshold) {
-    const { error: updateError } = await supabase
-      .from("owners")
-      .update({ contribution_paid: true })
-      .eq("id", ownerMatch.owner_id);
-    if (updateError) {
-      console.error("Failed to mark owner contribution_paid", updateError);
+  if (ownerMatch.owner_id) {
+    const { error: allocError } = await supabase.from("income_payment_allocations").insert({
+      payment_id: inserted.id,
+      owner_id: ownerMatch.owner_id,
+      condominium_id: ownerMatch.condominium_id,
+      amount: extracted.amount,
+    });
+    if (allocError) {
+      // Logged, not thrown: the payment is already saved and simply shows as
+      // unallocated, which is recoverable in the UI. Losing the whole
+      // extraction over it is not.
+      console.error("Failed to create income payment allocation", allocError);
     }
   }
 
@@ -91,8 +95,7 @@ async function matchAndInsertPayment(
  * Extraction pipeline for owner payment screenshots (e.g. Wise transfer
  * confirmations). Mirrors runExtractionPipeline() in pipeline.ts but for the
  * income side: extracts payer/amount/reference, matches against owners
- * (see owner-matching.ts), and marks the owner's contribution as paid when
- * the match is confident.
+ * (see owner-matching.ts), and records the match as a payment allocation.
  */
 export async function runIncomeExtractionPipeline(
   supabase: SupabaseClient<Database>,

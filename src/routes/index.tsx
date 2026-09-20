@@ -4,6 +4,7 @@ import { AppShell } from "@/components/AppShell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { needsAttention } from "@/lib/income-allocations";
 import { Upload, FileText, DollarSign, ReceiptText, AlertTriangle } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -87,22 +88,35 @@ function Index() {
   const { data: incomeTotals, isLoading: incomeTotalsLoading } = useQuery({
     queryKey: ["income_totals"],
     queryFn: async () => {
-      const [{ data: assocs }, { data: payments }] = await Promise.all([
+      const [{ data: assocs }, { data: payments }, { data: allocations }] = await Promise.all([
         supabase.from("associations").select("id,name").order("name"),
-        supabase.from("income_payments").select("condominium_id,owner_id,amount,currency"),
+        supabase.from("income_payments").select("id,amount,currency"),
+        supabase.from("income_payment_allocations").select("payment_id,condominium_id,amount"),
       ]);
+
+      const currencyByPayment = new Map((payments ?? []).map((p) => [p.id, p.currency ?? "—"]));
+      const allocsByPayment = new Map<string, { amount: number | null }[]>();
       const byAssoc = new Map<string, Map<string, number>>();
-      let unmatchedCount = 0;
-      for (const p of payments ?? []) {
-        if (!p.owner_id) unmatchedCount++;
-        if (!p.condominium_id) continue;
-        const cur = p.currency ?? "—";
-        if (!byAssoc.has(p.condominium_id)) byAssoc.set(p.condominium_id, new Map());
-        byAssoc.get(p.condominium_id)!.set(
-          cur,
-          (byAssoc.get(p.condominium_id)!.get(cur) ?? 0) + Number(p.amount ?? 0),
-        );
+
+      for (const a of allocations ?? []) {
+        if (!allocsByPayment.has(a.payment_id)) allocsByPayment.set(a.payment_id, []);
+        allocsByPayment.get(a.payment_id)!.push({ amount: a.amount });
+
+        if (!a.condominium_id) continue;
+        const cur = currencyByPayment.get(a.payment_id) ?? "—";
+        if (!byAssoc.has(a.condominium_id)) byAssoc.set(a.condominium_id, new Map());
+        byAssoc
+          .get(a.condominium_id)!
+          .set(cur, (byAssoc.get(a.condominium_id)!.get(cur) ?? 0) + Number(a.amount ?? 0));
       }
+
+      // Reuse the single definition of "needs a human" rather than restating
+      // the rule here -- a payment with no allocations AND an unknown amount
+      // must count, which a bare remainder comparison would miss.
+      const unmatchedCount = (payments ?? []).filter((p) =>
+        needsAttention(p.amount, allocsByPayment.get(p.id) ?? []),
+      ).length;
+
       return {
         totalCount: payments?.length ?? 0,
         unmatchedCount,
