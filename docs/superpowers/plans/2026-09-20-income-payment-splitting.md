@@ -60,7 +60,10 @@ CREATE TABLE public.income_payment_allocations (
   payment_id UUID NOT NULL REFERENCES public.income_payments(id) ON DELETE CASCADE,
   owner_id UUID REFERENCES public.owners(id) ON DELETE SET NULL,
   condominium_id UUID REFERENCES public.associations(id),
-  amount NUMERIC(14,2) NOT NULL,
+  -- Nullable on purpose: a payment can be attributed to an owner before its
+  -- amount is known (extraction can fail to read the figure). Forcing 0 here
+  -- would make "unknown" indistinguishable from a genuine zero in totals.
+  amount NUMERIC(14,2),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -88,10 +91,28 @@ CREATE INDEX income_payment_allocations_updated_idx
 -- Backfill: one allocation per already-matched payment. Additive only --
 -- no existing income_payments row is read-modified or deleted.
 INSERT INTO public.income_payment_allocations (payment_id, owner_id, condominium_id, amount)
-SELECT id, owner_id, condominium_id, COALESCE(amount, 0)
+SELECT id, owner_id, condominium_id, amount
 FROM public.income_payments
 WHERE owner_id IS NOT NULL;
 ```
+
+Also add the `updated_at` trigger. The outbound feed pages incrementally on `updated_at`, so a row changed by a plain `UPDATE` without advancing it would never be sent — silently, and permanently. Enforce it in the schema rather than trusting every future writer:
+
+```sql
+CREATE FUNCTION public.touch_income_payment_allocations_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER income_payment_allocations_set_updated_at
+  BEFORE UPDATE ON public.income_payment_allocations
+  FOR EACH ROW EXECUTE FUNCTION public.touch_income_payment_allocations_updated_at();
+```
+
+Do **not** add a unique index on `(payment_id, owner_id)`. Two allocation lines for the same owner under one payment is legitimate (two separate charges), and a hard database error is the wrong way to surface a UI mistake.
 
 - [ ] **Step 2: Apply against a copy of the database first**
 
@@ -108,7 +129,7 @@ SELECT (SELECT count(*) FROM public.income_payment_allocations)
 
 -- same total value
 SELECT COALESCE((SELECT sum(amount) FROM public.income_payment_allocations), 0)
-     = COALESCE((SELECT sum(COALESCE(amount,0)) FROM public.income_payments WHERE owner_id IS NOT NULL), 0) AS ok;
+     = COALESCE((SELECT sum(amount) FROM public.income_payments WHERE owner_id IS NOT NULL), 0) AS ok;
 
 -- every allocation points at the owner its payment already had
 SELECT NOT EXISTS (
@@ -407,7 +428,7 @@ Add this entry to `Tables` in `src/integrations/supabase/types.ts`, directly aft
           payment_id: string;
           owner_id: string | null;
           condominium_id: string | null;
-          amount: number;
+          amount: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -416,7 +437,7 @@ Add this entry to `Tables` in `src/integrations/supabase/types.ts`, directly aft
           payment_id: string;
           owner_id?: string | null;
           condominium_id?: string | null;
-          amount: number;
+          amount?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -425,7 +446,7 @@ Add this entry to `Tables` in `src/integrations/supabase/types.ts`, directly aft
           payment_id?: string;
           owner_id?: string | null;
           condominium_id?: string | null;
-          amount?: number;
+          amount?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -670,7 +691,7 @@ const saveAllocations = useMutation({
         .map((a) => ({
           owner_id: a.owner_id,
           condominium_id: a.condominium_id,
-          amount: a.amount ?? 0,
+          amount: a.amount,
         })),
     });
     if (rpcError) throw rpcError;
@@ -702,7 +723,7 @@ const assignOwner = useMutation({
         ? [{
             owner_id: ownerId,
             condominium_id: owner?.condominium_id ?? null,
-            amount: payment.amount ?? 0,
+            amount: payment.amount,
           }]
         : [],
     });
@@ -1152,7 +1173,7 @@ if (ownerMatch.owner_id) {
       payment_id: inserted.id,
       owner_id: ownerMatch.owner_id,
       condominium_id: ownerMatch.condominium_id,
-      amount: extracted.amount ?? 0,
+      amount: extracted.amount,
     });
   if (allocError) {
     console.error("Failed to create income payment allocation", allocError);
