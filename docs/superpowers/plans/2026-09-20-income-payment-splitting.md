@@ -260,11 +260,19 @@ export function allocationStatus(
   // An unknown total or an unknown slice means the split is not settled --
   // without this, remainderOf's null-to-zero coercion makes "nothing is known"
   // look identical to "it balances".
-  if (paymentAmount === null) return "partial";
-  if (allocations.some((a) => a.amount === null)) return "partial";
+  if (hasUnknownAmount(paymentAmount, allocations)) return "partial";
   return Math.abs(remainderOf(paymentAmount, allocations)) < CENT_TOLERANCE
     ? "allocated"
     : "partial";
+}
+
+/** True when the total or any slice is still unknown, so no remainder can be
+ *  computed honestly. Callers show "amount unknown" rather than a figure. */
+export function hasUnknownAmount(
+  paymentAmount: number | null,
+  allocations: readonly AllocationLike[],
+): boolean {
+  return paymentAmount === null || allocations.some((a) => a.amount === null);
 }
 
 /** Payments needing a human: nothing allocated, or the split does not balance. */
@@ -568,15 +576,10 @@ export function AllocationEditor({
             preferredCondominiumId={preferredCondominiumId}
             className="flex-1 min-w-0"
           />
-          <Input
-            type="number"
-            step="0.01"
-            value={a.amount ?? ""}
-            onChange={(ev) =>
-              update(a.key, { amount: ev.target.value ? Number(ev.target.value) : null })
-            }
-            className="w-24 flex-shrink-0"
-            aria-label="Allocated amount"
+          <AllocationAmountInput
+            amount={a.amount}
+            label={rowLabel}
+            onCommit={(amount) => update(a.key, { amount })}
           />
           <Button
             size="icon"
@@ -605,7 +608,7 @@ export function AllocationEditor({
           >
             {status === "allocated"
               ? "Fully allocated"
-              : paymentAmount === null || allocations.some((a) => a.amount === null)
+              : hasUnknownAmount(paymentAmount, allocations)
                 ? "Amount unknown"
                 : `Unallocated: ${formatMoney(remainder, currency)}`}
           </span>
@@ -616,7 +619,52 @@ export function AllocationEditor({
 }
 ```
 
-Note `min-w-0` on the combobox and `flex-shrink-0` on the amount and remove button — without them this row reintroduces exactly the overflow bug fixed in PR #36.
+Note `min-w-0` on the combobox and `flex-shrink-0` on the amount and remove button — without them this row reintroduces exactly the overflow bug fixed in PR #36. (Verified: `cn` is `twMerge`, and because `className` is merged last, `min-w-0` beats `OwnerCombobox`'s own `min-w-44`. Without that, the row's minimum would be ~318px against ~318px available — a hairline failure.)
+
+**The amount field must buffer its own text.** A controlled `type="number"` bound straight to a `number` cannot hold an in-progress `"12."` or `"-"`: the decimal point is erased as fast as it is typed, and `Number("-")` commits `NaN`, which `?? 0` does not guard, poisoning the whole split's remainder. Add this sub-component in the same file and give each row a distinct accessible name:
+
+```tsx
+function AllocationAmountInput({
+  amount,
+  label,
+  onCommit,
+}: {
+  amount: number | null;
+  label: string;
+  onCommit: (amount: number | null) => void;
+}) {
+  const [text, setText] = useState(amount === null ? "" : String(amount));
+
+  // Resync only when the numeric value genuinely changes elsewhere. A no-op
+  // parse like Number("12.") === 12 leaves `amount` equal, so this does not
+  // fire and the user's in-progress text survives.
+  useEffect(() => {
+    setText(amount === null ? "" : String(amount));
+  }, [amount]);
+
+  return (
+    <Input
+      type="number"
+      step="0.01"
+      value={text}
+      onChange={(ev) => {
+        const raw = ev.target.value;
+        setText(raw);
+        if (raw === "") {
+          onCommit(null);
+          return;
+        }
+        const parsed = Number(raw);
+        if (!Number.isNaN(parsed)) onCommit(parsed);
+      }}
+      className="w-24 flex-shrink-0"
+      aria-label={label}
+    />
+  );
+}
+```
+
+Every button in this component needs `type="button"` — this codebase's `Button` does not default it, so inside a form they would submit.
 
 - [ ] **Step 2: Typecheck**
 
