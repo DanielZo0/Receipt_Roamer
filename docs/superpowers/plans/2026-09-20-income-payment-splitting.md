@@ -809,7 +809,7 @@ function allocationsUnchanged(original: AllocationRow[], draft: AllocationDraft[
 
 - [ ] **Step 4: Keep direct owner assignment working outside edit mode**
 
-`onAssignOwner` must now write an allocation, not a column:
+`onAssignOwner` must now write an allocation, not a column. It must preserve an amount already recorded on the existing slice — a row can carry an amount with no owner yet, and overwriting it with the payment total would be silent data loss. `existingAmount` is `number | null | undefined` on purpose: `undefined` means no allocation exists so take the full total, `null` means one exists with a genuinely unknown amount and should stay unknown. Do not collapse them with `??`.
 
 ```ts
 const assignOwner = useMutation({
@@ -924,9 +924,11 @@ Replace the read-mode `OwnerCombobox` block in `payment-mobile-card.tsx` with:
 Directly under the block above:
 
 ```tsx
-{needsAttention(p.amount, allocations) && allocations.length > 0 && (
+{allocations.length > 0 && needsAttention(p.amount, allocations) && (
   <p className="text-xs text-amber-600">
-    Unallocated: {formatMoney(remainderOf(p.amount, allocations), p.currency)}
+    {hasUnknownAmount(p.amount, allocations)
+      ? "Amount unknown"
+      : `Unallocated: ${formatMoney(remainderOf(p.amount, allocations), p.currency)}`}
   </p>
 )}
 ```
@@ -944,15 +946,15 @@ Replace the edit-mode Owner block with:
       onChange={onAllocationChange}
       owners={owners}
       associations={associations}
-      paymentAmount={draft.amount ?? p.amount}
-      currency={draft.currency ?? p.currency}
+      paymentAmount={draft.amount === undefined ? p.amount : draft.amount}
+      currency={draft.currency === undefined ? p.currency : draft.currency}
       preferredCondominiumId={p.condominium_id}
     />
   </div>
 </div>
 ```
 
-Note `paymentAmount` reads the **draft** amount first, so editing the payment total updates the remainder live.
+Note `paymentAmount` reads the **draft** amount first, so editing the payment total updates the remainder live. It must NOT use `??`: `useRowEditor.start` seeds the draft, so a cleared field is explicit `null`, and `??` would fall back to the stale pre-clear value.
 
 - [ ] **Step 5: Apply the same two modes to `payment-table-row.tsx`**
 
@@ -966,8 +968,8 @@ Replace the Owner `TableCell` body in `payment-table-row.tsx` with:
       onChange={onAllocationChange}
       owners={owners}
       associations={associations}
-      paymentAmount={draft.amount ?? p.amount}
-      currency={draft.currency ?? p.currency}
+      paymentAmount={draft.amount === undefined ? p.amount : draft.amount}
+      currency={draft.currency === undefined ? p.currency : draft.currency}
       preferredCondominiumId={p.condominium_id}
     />
   ) : allocations.length <= 1 ? (
