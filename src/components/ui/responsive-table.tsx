@@ -5,7 +5,14 @@ import { Card } from "@/components/ui/card";
 
 const MobileCardList = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn("grid gap-3 md:hidden", className)} {...props} />
+    // grid-cols-[minmax(0,1fr)] is load-bearing: a default `auto` track sizes to
+    // the cards' max-content, and nowrap/truncated text reports its whole string
+    // as min-content — which pushed the column wider than the viewport.
+    <div
+      ref={ref}
+      className={cn("grid grid-cols-[minmax(0,1fr)] gap-3 md:hidden", className)}
+      {...props}
+    />
   ),
 );
 MobileCardList.displayName = "MobileCardList";

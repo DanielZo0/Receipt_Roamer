@@ -127,7 +127,7 @@ function Index() {
               Overview of your receipts and income.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button asChild>
               <Link to="/upload">
                 <Upload className="h-4 w-4 mr-1" /> Upload receipt
@@ -219,7 +219,7 @@ function Index() {
             </Link>
           )}
         </div>
-        <Card className="overflow-hidden">
+        <Card className="overflow-x-auto">
           {recent && recent.length > 0 ? (
             <table className="w-full text-sm">
               <thead>

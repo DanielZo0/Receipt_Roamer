@@ -141,10 +141,12 @@ function ImapPollStatus({
 
   if (!state) {
     return (
-      <Card className="p-3 mb-6 flex items-center justify-between gap-2 text-sm text-muted-foreground">
-        <span className="flex items-center gap-2">
-          <Inbox className="h-4 w-4" />
-          Yahoo IMAP polling hasn't run yet (not configured, or no cycle has completed).
+      <Card className="p-3 mb-6 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+        <span className="flex items-start gap-2 min-w-0 flex-1">
+          <Inbox className="h-4 w-4 flex-shrink-0 mt-0.5" />
+          <span className="min-w-0 break-words">
+            Yahoo IMAP polling hasn't run yet (not configured, or no cycle has completed).
+          </span>
         </span>
         {pollNowButton}
       </Card>
@@ -155,18 +157,22 @@ function ImapPollStatus({
 
   return (
     <Card
-      className={`p-3 mb-6 flex items-center justify-between gap-2 text-sm ${isStale ? "border-amber-500/50" : ""}`}
+      className={`p-3 mb-6 flex flex-wrap items-center justify-between gap-2 text-sm ${isStale ? "border-amber-500/50" : ""}`}
     >
-      <span className={`flex items-center gap-2 ${isStale ? "text-amber-600" : "text-muted-foreground"}`}>
+      <span
+        className={`flex items-start gap-2 min-w-0 flex-1 ${isStale ? "text-amber-600" : "text-muted-foreground"}`}
+      >
         {isStale ? (
-          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
         ) : (
-          <Inbox className="h-4 w-4 flex-shrink-0" />
+          <Inbox className="h-4 w-4 flex-shrink-0 mt-0.5" />
         )}
-        Yahoo IMAP poller ({state.mailbox}) last ran{" "}
-        <span className="font-medium">{formatRelativeTime(state.updated_at)}</span>
-        {" · "}watermark UID {state.last_uid}
-        {isStale && " — no poll in over 48h, check the poller / IMAP credentials"}
+        <span className="min-w-0 break-words">
+          Yahoo IMAP poller ({state.mailbox}) last ran{" "}
+          <span className="font-medium">{formatRelativeTime(state.updated_at)}</span>
+          {" · "}watermark UID {state.last_uid}
+          {isStale && " — no poll in over 48h, check the poller / IMAP credentials"}
+        </span>
       </span>
       {pollNowButton}
     </Card>
@@ -690,7 +696,7 @@ function UploadLogsPage() {
                   )}
                 </div>
 
-                <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t">
+                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground pt-1 border-t">
                   <span>
                     {new Date(log.created_at).toLocaleDateString(undefined, {
                       day: "2-digit",

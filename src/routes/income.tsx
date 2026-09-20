@@ -12,12 +12,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppShell } from "@/components/AppShell";
-import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { OwnerCombobox, type OwnerLite, type AssociationLite } from "@/components/OwnerCombobox";
-import { MobileCardList, MobileCard, MobileCardHeader, MobileCardRow } from "@/components/ui/responsive-table";
+import { MobileCardList } from "@/components/ui/responsive-table";
+import { PaymentMobileCard } from "@/components/income/payment-mobile-card";
+import { PaymentTableRow } from "@/components/income/payment-table-row";
+import { PAYMENT_EDITABLE_FIELDS, type PaymentRow } from "@/lib/income-types";
+import { formatIsoDateDmy } from "@/lib/format";
+import { draftIsUnchanged, useRowEditor } from "@/lib/use-row-editor";
 import { supabase } from "@/integrations/supabase/client";
 import { extractAndSaveIncomePayment } from "@/lib/income.functions";
 import { toast } from "sonner";
@@ -29,7 +32,6 @@ import {
   Clock,
   Image,
   FileText,
-  ExternalLink,
   Mail,
   Copy,
   ChevronDown,
@@ -51,11 +53,6 @@ function formatDateForFilename(d: Date): string {
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   return `${dd}-${mm}-${d.getFullYear()}`;
-}
-
-function formatIsoDateDmy(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return y && m && d ? `${d}-${m}-${y}` : iso;
 }
 
 type FileStatus = "queued" | "uploading" | "extracting" | "done" | "error";
@@ -122,22 +119,6 @@ function StatusChip({ status, error }: { status: FileStatus; error?: string }) {
   );
 }
 
-type PaymentRow = {
-  id: string;
-  owner_id: string | null;
-  condominium_id: string | null;
-  payer_name: string | null;
-  amount: number | null;
-  currency: string | null;
-  payment_date: string | null;
-  reference_string: string | null;
-  match_confidence: number | null;
-  match_signals: string[] | null;
-  file_path: string | null;
-  exported_at: string | null;
-  created_at: string;
-};
-
 function IncomePage() {
   const qc = useQueryClient();
   const extractFn = useServerFn(extractAndSaveIncomePayment);
@@ -190,6 +171,8 @@ function IncomePage() {
     [payments, showUnmatchedOnly],
   );
 
+  const editor = useRowEditor<PaymentRow>();
+
   const update = useMutation({
     mutationFn: async (row: Partial<PaymentRow> & { id: string }) => {
       const { id, ...rest } = row;
@@ -200,7 +183,10 @@ function IncomePage() {
       const { error } = await supabase.from("income_payments").update(rest).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["income_payments"] }),
+    onSuccess: () => {
+      editor.cancel();
+      qc.invalidateQueries({ queryKey: ["income_payments"] });
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -321,6 +307,14 @@ function IncomePage() {
     const files = Array.from(e.target.files ?? []);
     if (files.length) addFiles(files);
     e.target.value = "";
+  }
+
+  function saveRow(p: PaymentRow) {
+    if (draftIsUnchanged(p, editor.draft)) {
+      editor.cancel();
+      return;
+    }
+    update.mutate({ id: p.id, ...editor.draft });
   }
 
   async function openFile(path: string | null) {
@@ -449,6 +443,26 @@ function IncomePage() {
             });
           }
 
+          const paymentProps = (p: PaymentRow) => ({
+            payment: p,
+            owners: (owners ?? []) as OwnerLite[],
+            associations: (associations ?? []) as AssociationLite[],
+            condoName: condoName(p.condominium_id),
+            selected: selected.has(p.id),
+            onToggleSelect: () => toggleRow(p.id),
+            isEditing: editor.isEditing(p.id),
+            draft: editor.draft,
+            onChange: editor.set,
+            onEdit: () => editor.start(p, PAYMENT_EDITABLE_FIELDS),
+            onCancel: editor.cancel,
+            onSave: () => saveRow(p),
+            saving: update.isPending && editor.editingId === p.id,
+            onAssignOwner: (ownerId: string | null) =>
+              update.mutate({ id: p.id, owner_id: ownerId }),
+            onOpenFile: () => openFile(p.file_path),
+            onDelete: () => del.mutate(p),
+          });
+
           return (
             <>
               <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
@@ -532,78 +546,24 @@ function IncomePage() {
                       <TableHead>Condo</TableHead>
                       <TableHead>Owner</TableHead>
                       <TableHead>Match</TableHead>
-                      <TableHead>File</TableHead>
                       <TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {isLoading ? (
                       <TableRow>
-                        <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                           Loading…
                         </TableCell>
                       </TableRow>
                     ) : filtered.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                           {showUnmatchedOnly ? "No unmatched payments." : "No income payments yet."}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filtered.map((p) => (
-                        <TableRow key={p.id} className={!p.owner_id ? "bg-amber-500/5" : undefined}>
-                          <TableCell>
-                            <Checkbox
-                              checked={selected.has(p.id)}
-                              onCheckedChange={() => toggleRow(p.id)}
-                              aria-label={`Select payment from ${p.payer_name ?? "unknown"}`}
-                            />
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap">{p.payment_date ?? "—"}</TableCell>
-                          <TableCell>{p.payer_name ?? "—"}</TableCell>
-                          <TableCell className="whitespace-nowrap">
-                            {p.amount != null ? `${p.amount.toFixed(2)} ${p.currency ?? ""}` : "—"}
-                          </TableCell>
-                          <TableCell className="max-w-48 truncate" title={p.reference_string ?? ""}>
-                            {p.reference_string ?? "—"}
-                          </TableCell>
-                          <TableCell>{condoName(p.condominium_id)}</TableCell>
-                          <TableCell>
-                            <OwnerCombobox
-                              owners={(owners ?? []) as OwnerLite[]}
-                              associations={(associations ?? []) as AssociationLite[]}
-                              value={p.owner_id}
-                              onChange={(ownerId) => update.mutate({ id: p.id, owner_id: ownerId })}
-                              preferredCondominiumId={p.condominium_id}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            {p.match_confidence != null ? (
-                              <Badge variant={p.owner_id ? "outline" : "destructive"}>
-                                {(p.match_confidence * 100).toFixed(0)}%
-                              </Badge>
-                            ) : (
-                              "—"
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {p.file_path ? (
-                              <Button size="icon" variant="ghost" onClick={() => openFile(p.file_path)}>
-                                <ExternalLink className="h-4 w-4" />
-                              </Button>
-                            ) : (
-                              <FileText className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <ConfirmDeleteButton
-                              title="Delete this payment?"
-                              description={`This will permanently remove the payment from ${p.payer_name ?? "this payer"}${p.file_path ? " and its attached file" : ""}. This can't be undone.`}
-                              onConfirm={() => del.mutate(p)}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))
+                      filtered.map((p) => <PaymentTableRow key={p.id} {...paymentProps(p)} />)
                     )}
                   </TableBody>
                 </Table>
@@ -618,65 +578,7 @@ function IncomePage() {
               ) : (
                 <MobileCardList>
                   {filtered.map((p) => (
-                    <MobileCard key={p.id} className={!p.owner_id ? "bg-amber-500/5" : undefined}>
-                      <MobileCardHeader>
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Checkbox
-                            checked={selected.has(p.id)}
-                            onCheckedChange={() => toggleRow(p.id)}
-                            aria-label={`Select payment from ${p.payer_name ?? "unknown"}`}
-                          />
-                          <span className="text-sm text-muted-foreground whitespace-nowrap">
-                            {p.payment_date ?? "—"}
-                          </span>
-                        </div>
-                        <span className="font-semibold whitespace-nowrap">
-                          {p.amount != null ? `${p.amount.toFixed(2)} ${p.currency ?? ""}` : "—"}
-                        </span>
-                      </MobileCardHeader>
-
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium truncate">{p.payer_name ?? "—"}</span>
-                        {p.match_confidence != null && (
-                          <Badge variant={p.owner_id ? "outline" : "destructive"} className="flex-shrink-0">
-                            {(p.match_confidence * 100).toFixed(0)}%
-                          </Badge>
-                        )}
-                      </div>
-
-                      {p.reference_string && (
-                        <p className="text-xs text-muted-foreground truncate" title={p.reference_string}>
-                          {p.reference_string}
-                        </p>
-                      )}
-
-                      <MobileCardRow>
-                        <span className="text-muted-foreground">Condo</span>
-                        <span>{condoName(p.condominium_id)}</span>
-                      </MobileCardRow>
-
-                      <OwnerCombobox
-                        owners={(owners ?? []) as OwnerLite[]}
-                        associations={(associations ?? []) as AssociationLite[]}
-                        value={p.owner_id}
-                        onChange={(ownerId) => update.mutate({ id: p.id, owner_id: ownerId })}
-                        preferredCondominiumId={p.condominium_id}
-                        className="w-full"
-                      />
-
-                      <div className="flex items-center justify-end gap-1 pt-1 border-t">
-                        {p.file_path && (
-                          <Button size="icon" variant="ghost" onClick={() => openFile(p.file_path)}>
-                            <ExternalLink className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <ConfirmDeleteButton
-                          title="Delete this payment?"
-                          description={`This will permanently remove the payment from ${p.payer_name ?? "this payer"}${p.file_path ? " and its attached file" : ""}. This can't be undone.`}
-                          onConfirm={() => del.mutate(p)}
-                        />
-                      </div>
-                    </MobileCard>
+                    <PaymentMobileCard key={p.id} {...paymentProps(p)} />
                   ))}
                 </MobileCardList>
               )}
