@@ -1000,7 +1000,21 @@ Replace the Owner `TableCell` body in `payment-table-row.tsx` with:
 
 `paymentAmount` reads `draft.amount` before `p.amount` here too — the same single source of truth as the mobile card, so the remainder agrees across both viewports.
 
-- [ ] **Step 6: Typecheck and commit**
+- [ ] **Step 6: Stop using `p.owner_id` as a "matched" signal**
+
+Both files paint an amber background with `!p.owner_id ? "bg-amber-500/5"` and pick the confidence badge variant with `p.owner_id ? "outline" : "destructive"`. `owner_id` is now only a mirror of the single-allocation case — NULL for *any* split — so a perfectly balanced 2-way split would render amber with a red badge, contradicting the "Needs attention" filter.
+
+Compute the predicate once per component and use it for both:
+
+```tsx
+  // p.owner_id is only a mirror of the single-allocation case -- it is NULL for
+  // any split, so it cannot answer "does this need attention?".
+  const attention = needsAttention(p.amount, allocations);
+```
+
+Three background sites (the mobile card has one in each of its two returns, the table row has one) and two badge sites. Afterwards `grep -n "p.owner_id"` across both files must return nothing.
+
+- [ ] **Step 7: Typecheck and commit**
 
 Run: `npx tsc --noEmit`
 
