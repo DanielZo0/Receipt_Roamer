@@ -8,10 +8,12 @@ export type AllocationStatus = "unallocated" | "partial" | "allocated";
  *  so 0.1 + 0.1 + 0.1 must still count as 0.3. */
 export const CENT_TOLERANCE = 0.005;
 
+/** Sums allocation amounts, coercing a null (not-yet-known) slice to 0. */
 export function allocatedTotal(allocations: readonly AllocationLike[]): number {
   return allocations.reduce((sum, a) => sum + (a.amount ?? 0), 0);
 }
 
+/** Payment amount minus allocated total, coercing a null payment amount to 0 -- what the live editor renders as the amount still to assign. */
 export function remainderOf(
   paymentAmount: number | null,
   allocations: readonly AllocationLike[],
@@ -19,17 +21,23 @@ export function remainderOf(
   return (paymentAmount ?? 0) - allocatedTotal(allocations);
 }
 
+/** "unallocated" with no rows; otherwise "allocated" only if the total and every slice are known and balance, else "partial" -- an unknown amount is never treated as settled. */
 export function allocationStatus(
   paymentAmount: number | null,
   allocations: readonly AllocationLike[],
 ): AllocationStatus {
   if (allocations.length === 0) return "unallocated";
+  // An unknown total or an unknown slice means the split is not settled --
+  // without this, remainderOf's null-to-zero coercion makes "nothing is known"
+  // look identical to "it balances".
+  if (paymentAmount === null) return "partial";
+  if (allocations.some((a) => a.amount === null)) return "partial";
   return Math.abs(remainderOf(paymentAmount, allocations)) < CENT_TOLERANCE
     ? "allocated"
     : "partial";
 }
 
-/** Payments needing a human: nothing allocated, or the split does not balance. */
+/** True for the "Needs attention" tab: anything other than a fully-known, balanced allocation. */
 export function needsAttention(
   paymentAmount: number | null,
   allocations: readonly AllocationLike[],

@@ -59,6 +59,18 @@ describe("allocationStatus", () => {
   it("does not tolerate a whole cent", () => {
     expect(allocationStatus(550, [alloc(549.99)])).toBe("partial");
   });
+
+  it("is 'partial' when the payment amount is unknown", () => {
+    expect(allocationStatus(null, [alloc(300)])).toBe("partial");
+  });
+
+  it("is 'partial' when any slice amount is unknown", () => {
+    expect(allocationStatus(550, [{ amount: null }, alloc(550)])).toBe("partial");
+  });
+
+  it("is 'partial', not 'allocated', when nothing at all is known", () => {
+    expect(allocationStatus(null, [{ amount: null }])).toBe("partial");
+  });
 });
 
 describe("needsAttention", () => {
@@ -72,5 +84,9 @@ describe("needsAttention", () => {
 
   it("is false when fully allocated", () => {
     expect(needsAttention(550, [alloc(550)])).toBe(false);
+  });
+
+  it("is true when nothing at all is known", () => {
+    expect(needsAttention(null, [{ amount: null }])).toBe(true);
   });
 });
