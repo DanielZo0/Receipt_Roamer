@@ -57,7 +57,9 @@ async function main() {
 
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
-    console.error("Missing DATABASE_URL. Supabase -> Project Settings -> Database -> Connection string.");
+    console.error(
+      "Missing DATABASE_URL. Supabase -> Project Settings -> Database -> Connection string.",
+    );
     process.exit(1);
   }
 
@@ -84,7 +86,9 @@ async function main() {
     }
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
-    console.error(`\nFAILED - everything rolled back, the database is unchanged.\n\n${err.message}`);
+    console.error(
+      `\nFAILED - everything rolled back, the database is unchanged.\n\n${err.message}`,
+    );
     process.exitCode = 1;
   } finally {
     await client.end();
