@@ -9,8 +9,10 @@ import {
   MobileCardRow,
 } from "@/components/ui/responsive-table";
 import { OwnerCombobox, type AssociationLite, type OwnerLite } from "@/components/OwnerCombobox";
+import { AllocationEditor } from "@/components/income/allocation-editor";
 import { PaymentActions } from "@/components/income/payment-actions";
-import type { PaymentRow } from "@/lib/income-types";
+import { hasUnknownAmount, needsAttention, remainderOf } from "@/lib/income-allocations";
+import type { AllocationDraft, AllocationRow, PaymentRow } from "@/lib/income-types";
 import { formatIsoDateDmy, formatMoney } from "@/lib/format";
 
 export type PaymentRowProps = {
@@ -32,6 +34,10 @@ export type PaymentRowProps = {
   onOpenFile: () => void;
   onDelete: () => void;
   extra?: ReactNode;
+  allocations: AllocationRow[];
+  allocationDraft: AllocationDraft[];
+  onAllocationChange: (next: AllocationDraft[]) => void;
+  ownerName: (id: string | null) => string;
 };
 
 export function PaymentMobileCard({
@@ -51,6 +57,10 @@ export function PaymentMobileCard({
   onAssignOwner,
   onOpenFile,
   onDelete,
+  allocations,
+  allocationDraft,
+  onAllocationChange,
+  ownerName,
 }: PaymentRowProps) {
   const deleteDescription = `This will permanently remove the payment from ${p.payer_name ?? "this payer"}${p.file_path ? " and its attached file" : ""}. This can't be undone.`;
 
@@ -107,16 +117,43 @@ export function PaymentMobileCard({
           <span className="min-w-0 truncate">{condoName}</span>
         </MobileCardRow>
 
-        {/* Assigning an owner is this page's main job, so it stays usable
-            without switching the card into edit mode. */}
-        <OwnerCombobox
-          owners={owners}
-          associations={associations}
-          value={p.owner_id}
-          onChange={onAssignOwner}
-          preferredCondominiumId={p.condominium_id}
-          className="w-full"
-        />
+        {allocations.length <= 1 ? (
+          // The common case keeps a directly-usable picker: assigning an owner
+          // is this page's main job and must not gain a click.
+          <OwnerCombobox
+            owners={owners}
+            associations={associations}
+            value={allocations[0]?.owner_id ?? null}
+            onChange={onAssignOwner}
+            preferredCondominiumId={p.condominium_id}
+            className="w-full"
+          />
+        ) : (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <MobileCardLabel>Split</MobileCardLabel>
+              <Badge variant="outline" className="flex-shrink-0">
+                {allocations.length} owners
+              </Badge>
+            </div>
+            {allocations.map((a) => (
+              <div key={a.id} className="flex items-center justify-between gap-2 text-sm">
+                <span className="min-w-0 truncate">{ownerName(a.owner_id)}</span>
+                <span className="flex-shrink-0 font-mono">
+                  {formatMoney(a.amount, p.currency)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {allocations.length > 0 && needsAttention(p.amount, allocations) && (
+          <p className="text-xs text-amber-600">
+            {hasUnknownAmount(p.amount, allocations)
+              ? "Amount unknown"
+              : `Unallocated: ${formatMoney(remainderOf(p.amount, allocations), p.currency)}`}
+          </p>
+        )}
 
         <div className="flex items-center justify-end gap-1 pt-1 border-t">{actions}</div>
       </MobileCard>
@@ -170,15 +207,18 @@ export function PaymentMobileCard({
       </div>
 
       <div>
-        <MobileCardLabel>Owner</MobileCardLabel>
-        <OwnerCombobox
-          owners={owners}
-          associations={associations}
-          value={draft.owner_id ?? null}
-          onChange={(ownerId) => onChange({ owner_id: ownerId })}
-          preferredCondominiumId={p.condominium_id}
-          className="w-full mt-1"
-        />
+        <MobileCardLabel>Owners</MobileCardLabel>
+        <div className="mt-1">
+          <AllocationEditor
+            allocations={allocationDraft}
+            onChange={onAllocationChange}
+            owners={owners}
+            associations={associations}
+            paymentAmount={draft.amount ?? p.amount}
+            currency={draft.currency ?? p.currency}
+            preferredCondominiumId={p.condominium_id}
+          />
+        </div>
       </div>
 
       <div className="flex items-center justify-end gap-1 pt-1 border-t">{actions}</div>

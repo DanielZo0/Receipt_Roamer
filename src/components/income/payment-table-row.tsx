@@ -3,8 +3,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { OwnerCombobox } from "@/components/OwnerCombobox";
+import { AllocationEditor } from "@/components/income/allocation-editor";
 import { PaymentActions } from "@/components/income/payment-actions";
 import type { PaymentRowProps } from "@/components/income/payment-mobile-card";
+import { hasUnknownAmount, needsAttention, remainderOf } from "@/lib/income-allocations";
 import { formatIsoDateDmy, formatMoney } from "@/lib/format";
 
 export function PaymentTableRow({
@@ -24,6 +26,10 @@ export function PaymentTableRow({
   onAssignOwner,
   onOpenFile,
   onDelete,
+  allocations,
+  allocationDraft,
+  onAllocationChange,
+  ownerName,
 }: PaymentRowProps) {
   const deleteDescription = `This will permanently remove the payment from ${p.payer_name ?? "this payer"}${p.file_path ? " and its attached file" : ""}. This can't be undone.`;
 
@@ -109,16 +115,44 @@ export function PaymentTableRow({
       )}
 
       <TableCell>{condoName}</TableCell>
-      <TableCell>
-        <OwnerCombobox
-          owners={owners}
-          associations={associations}
-          value={isEditing ? (draft.owner_id ?? null) : p.owner_id}
-          onChange={(ownerId) =>
-            isEditing ? onChange({ owner_id: ownerId }) : onAssignOwner(ownerId)
-          }
-          preferredCondominiumId={p.condominium_id}
-        />
+      <TableCell className="min-w-64">
+        {isEditing ? (
+          <AllocationEditor
+            allocations={allocationDraft}
+            onChange={onAllocationChange}
+            owners={owners}
+            associations={associations}
+            paymentAmount={draft.amount ?? p.amount}
+            currency={draft.currency ?? p.currency}
+            preferredCondominiumId={p.condominium_id}
+          />
+        ) : allocations.length <= 1 ? (
+          <OwnerCombobox
+            owners={owners}
+            associations={associations}
+            value={allocations[0]?.owner_id ?? null}
+            onChange={onAssignOwner}
+            preferredCondominiumId={p.condominium_id}
+          />
+        ) : (
+          <div className="space-y-0.5">
+            {allocations.map((a) => (
+              <div key={a.id} className="flex items-center justify-between gap-3 text-sm">
+                <span className="min-w-0 truncate">{ownerName(a.owner_id)}</span>
+                <span className="flex-shrink-0 font-mono">
+                  {formatMoney(a.amount, p.currency)}
+                </span>
+              </div>
+            ))}
+            {needsAttention(p.amount, allocations) && (
+              <span className="text-xs text-amber-600">
+                {hasUnknownAmount(p.amount, allocations)
+                  ? "Amount unknown"
+                  : `Unallocated: ${formatMoney(remainderOf(p.amount, allocations), p.currency)}`}
+              </span>
+            )}
+          </div>
+        )}
       </TableCell>
       <TableCell>
         {p.match_confidence != null ? (
