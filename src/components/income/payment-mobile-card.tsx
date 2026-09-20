@@ -214,8 +214,11 @@ export function PaymentMobileCard({
             onChange={onAllocationChange}
             owners={owners}
             associations={associations}
-            paymentAmount={draft.amount ?? p.amount}
-            currency={draft.currency ?? p.currency}
+            // `??` would treat a deliberately cleared field as "unset" and fall
+            // back to the stale value, so the remainder would be computed
+            // against a number the user just deleted.
+            paymentAmount={draft.amount === undefined ? p.amount : draft.amount}
+            currency={draft.currency === undefined ? p.currency : draft.currency}
             preferredCondominiumId={p.condominium_id}
           />
         </div>

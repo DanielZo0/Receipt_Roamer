@@ -228,11 +228,27 @@ function IncomePage() {
   }
 
   const assignOwner = useMutation({
-    mutationFn: async ({ payment, ownerId }: { payment: PaymentRow; ownerId: string | null }) => {
+    mutationFn: async ({
+      payment,
+      ownerId,
+      existingAmount,
+    }: {
+      payment: PaymentRow;
+      ownerId: string | null;
+      existingAmount: number | null | undefined;
+    }) => {
       const { error } = await supabase.rpc("set_payment_allocations", {
         p_payment_id: payment.id,
         p_allocations: ownerId
-          ? [{ owner_id: ownerId, condominium_id: null, amount: payment.amount }]
+          ? [
+              {
+                owner_id: ownerId,
+                condominium_id: null,
+                // Keep an amount the user already recorded on this slice --
+                // only a payment with no allocation at all takes the full total.
+                amount: existingAmount === undefined ? payment.amount : existingAmount,
+              },
+            ]
           : [],
       });
       if (error) throw error;
@@ -568,7 +584,11 @@ function IncomePage() {
             onSave: () => saveRow(p),
             saving: saveAllocations.isPending && editor.editingId === p.id,
             onAssignOwner: (ownerId: string | null) =>
-              assignOwner.mutate({ payment: p, ownerId }),
+              assignOwner.mutate({
+                payment: p,
+                ownerId,
+                existingAmount: (allocationsByPayment.get(p.id) ?? [])[0]?.amount,
+              }),
             onOpenFile: () => openFile(p.file_path),
             onDelete: () => del.mutate(p),
             allocations: allocationsByPayment.get(p.id) ?? [],

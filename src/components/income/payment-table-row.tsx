@@ -122,36 +122,43 @@ export function PaymentTableRow({
             onChange={onAllocationChange}
             owners={owners}
             associations={associations}
-            paymentAmount={draft.amount ?? p.amount}
-            currency={draft.currency ?? p.currency}
-            preferredCondominiumId={p.condominium_id}
-          />
-        ) : allocations.length <= 1 ? (
-          <OwnerCombobox
-            owners={owners}
-            associations={associations}
-            value={allocations[0]?.owner_id ?? null}
-            onChange={onAssignOwner}
+            // `??` would treat a deliberately cleared field as "unset" and fall
+            // back to the stale value, so the remainder would be computed
+            // against a number the user just deleted.
+            paymentAmount={draft.amount === undefined ? p.amount : draft.amount}
+            currency={draft.currency === undefined ? p.currency : draft.currency}
             preferredCondominiumId={p.condominium_id}
           />
         ) : (
-          <div className="space-y-0.5">
-            {allocations.map((a) => (
-              <div key={a.id} className="flex items-center justify-between gap-3 text-sm">
-                <span className="min-w-0 truncate">{ownerName(a.owner_id)}</span>
-                <span className="flex-shrink-0 font-mono">
-                  {formatMoney(a.amount, p.currency)}
-                </span>
+          <>
+            {allocations.length <= 1 ? (
+              <OwnerCombobox
+                owners={owners}
+                associations={associations}
+                value={allocations[0]?.owner_id ?? null}
+                onChange={onAssignOwner}
+                preferredCondominiumId={p.condominium_id}
+              />
+            ) : (
+              <div className="space-y-0.5">
+                {allocations.map((a) => (
+                  <div key={a.id} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="min-w-0 truncate">{ownerName(a.owner_id)}</span>
+                    <span className="flex-shrink-0 font-mono">
+                      {formatMoney(a.amount, p.currency)}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
-            {needsAttention(p.amount, allocations) && (
-              <span className="text-xs text-amber-600">
+            )}
+            {allocations.length > 0 && needsAttention(p.amount, allocations) && (
+              <span className="mt-1 block text-xs text-amber-600">
                 {hasUnknownAmount(p.amount, allocations)
                   ? "Amount unknown"
                   : `Unallocated: ${formatMoney(remainderOf(p.amount, allocations), p.currency)}`}
               </span>
             )}
-          </div>
+          </>
         )}
       </TableCell>
       <TableCell>
