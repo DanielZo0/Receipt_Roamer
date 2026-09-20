@@ -26,7 +26,7 @@ import {
   draftFromRow,
 } from "@/lib/income-types";
 import { formatIsoDateDmy } from "@/lib/format";
-import { useRowEditor } from "@/lib/use-row-editor";
+import { draftIsUnchanged, useRowEditor } from "@/lib/use-row-editor";
 import { supabase } from "@/integrations/supabase/client";
 import { extractAndSaveIncomePayment } from "@/lib/income.functions";
 import { toast } from "sonner";
@@ -86,6 +86,21 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Compare by content, never by AllocationDraft.key -- `key` holds the DB id
+ *  for a loaded row but a fresh random UUID for an unsaved one, so it cannot
+ *  tell the two apart. */
+function allocationsUnchanged(original: AllocationRow[], draft: AllocationDraft[]): boolean {
+  if (original.length !== draft.length) return false;
+  return original.every((o, i) => {
+    const d = draft[i];
+    return (
+      d.owner_id === o.owner_id &&
+      d.condominium_id === o.condominium_id &&
+      d.amount === o.amount
+    );
+  });
 }
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
@@ -249,7 +264,11 @@ function IncomePage() {
       setSelected(new Set());
       toast.success(`Assigned ${ids.length} payment${ids.length === 1 ? "" : "s"}`);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      qc.invalidateQueries({ queryKey: ["income_payments"] });
+      qc.invalidateQueries({ queryKey: ["income_payment_allocations"] });
+      toast.error(e.message);
+    },
   });
 
   const markExported = useMutation({
@@ -358,16 +377,18 @@ function IncomePage() {
       payment,
       fields,
       allocations,
+      originalAllocations,
     }: {
       payment: PaymentRow;
       fields: Partial<PaymentRow>;
       allocations: AllocationDraft[];
+      originalAllocations: AllocationRow[];
     }) => {
       const scalarFields = { ...fields };
       delete scalarFields.owner_id; // owner now lives in allocations
       delete scalarFields.condominium_id; // and the mirror is set by the RPC
 
-      if (Object.keys(scalarFields).length > 0) {
+      if (!draftIsUnchanged(payment, scalarFields)) {
         const { error } = await supabase
           .from("income_payments")
           .update(scalarFields)
@@ -375,20 +396,22 @@ function IncomePage() {
         if (error) throw error;
       }
 
-      const { error: rpcError } = await supabase.rpc("set_payment_allocations", {
-        p_payment_id: payment.id,
-        p_allocations: allocations
-          .filter((a) => a.owner_id !== null || a.amount !== null)
-          .map((a) => ({
-            owner_id: a.owner_id,
-            condominium_id: a.condominium_id,
-            amount: a.amount,
-          })),
-      });
-      if (rpcError) throw rpcError;
+      if (!allocationsUnchanged(originalAllocations, allocations)) {
+        const { error: rpcError } = await supabase.rpc("set_payment_allocations", {
+          p_payment_id: payment.id,
+          p_allocations: allocations
+            .filter((a) => a.owner_id !== null || a.amount !== null)
+            .map((a) => ({
+              owner_id: a.owner_id,
+              condominium_id: a.condominium_id,
+              amount: a.amount,
+            })),
+        });
+        if (rpcError) throw rpcError;
+      }
     },
-    onSuccess: () => {
-      cancelEdit();
+    onSuccess: (_data, variables) => {
+      if (editor.editingId === variables.payment.id) cancelEdit();
       qc.invalidateQueries({ queryKey: ["income_payments"] });
       qc.invalidateQueries({ queryKey: ["income_payment_allocations"] });
     },
@@ -396,7 +419,12 @@ function IncomePage() {
   });
 
   function saveRow(p: PaymentRow) {
-    saveAllocations.mutate({ payment: p, fields: editor.draft, allocations: allocationDraft });
+    saveAllocations.mutate({
+      payment: p,
+      fields: editor.draft,
+      allocations: allocationDraft,
+      originalAllocations: allocationsByPayment.get(p.id) ?? [],
+    });
   }
 
   async function openFile(path: string | null) {
