@@ -198,6 +198,58 @@ export type Database = {
           },
         ];
       };
+      income_payment_allocations: {
+        Row: {
+          id: string;
+          payment_id: string;
+          owner_id: string | null;
+          condominium_id: string | null;
+          amount: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          payment_id: string;
+          owner_id?: string | null;
+          condominium_id?: string | null;
+          amount?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          payment_id?: string;
+          owner_id?: string | null;
+          condominium_id?: string | null;
+          amount?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "income_payment_allocations_payment_id_fkey";
+            columns: ["payment_id"];
+            isOneToOne: false;
+            referencedRelation: "income_payments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "income_payment_allocations_owner_id_fkey";
+            columns: ["owner_id"];
+            isOneToOne: false;
+            referencedRelation: "owners";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "income_payment_allocations_condominium_id_fkey";
+            columns: ["condominium_id"];
+            isOneToOne: false;
+            referencedRelation: "associations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       income_payments: {
         Row: {
           id: string;
@@ -579,7 +631,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      set_payment_allocations: {
+        Args: { p_payment_id: string; p_allocations: Json };
+        Returns: undefined;
+      };
     };
     Enums: {
       [_ in never]: never;

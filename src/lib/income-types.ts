@@ -23,3 +23,37 @@ export const PAYMENT_EDITABLE_FIELDS = [
   "reference_string",
   "owner_id",
 ] as const satisfies readonly (keyof PaymentRow)[];
+
+/** A saved allocation row. `amount` is nullable because a payment can be
+ *  attributed to an owner before its figure is known. */
+export type AllocationRow = {
+  id: string;
+  payment_id: string;
+  owner_id: string | null;
+  condominium_id: string | null;
+  amount: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** An allocation being edited. `key` is a client-side identity for React,
+ *  because an unsaved row has no database id yet. */
+export type AllocationDraft = {
+  key: string;
+  owner_id: string | null;
+  condominium_id: string | null;
+  amount: number | null;
+};
+
+export function draftFromRow(row: AllocationRow): AllocationDraft {
+  return {
+    key: row.id,
+    owner_id: row.owner_id,
+    condominium_id: row.condominium_id,
+    amount: row.amount,
+  };
+}
+
+export function emptyDraft(): AllocationDraft {
+  return { key: crypto.randomUUID(), owner_id: null, condominium_id: null, amount: null };
+}
