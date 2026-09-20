@@ -119,4 +119,40 @@ export const expectedSchema: { table: string; columns: string[] }[] = [
     table: "rule_notifications",
     columns: ["id", "rule_id", "expense_id", "message", "read", "created_at"],
   },
+  {
+    table: "income_payments",
+    columns: [
+      "id",
+      "owner_id",
+      "condominium_id",
+      "payer_name",
+      "amount",
+      "currency",
+      "payment_date",
+      "reference_string",
+      "match_confidence",
+      "match_signals",
+      "file_path",
+      "file_mime",
+      "raw_extraction",
+      "exported_at",
+      "allocations_updated_at",
+      "created_at",
+    ],
+  },
+  {
+    // One row per owner slice of a payment, so one transfer can be split across
+    // several owners. owner_id/condominium_id on income_payments are only a
+    // mirror of the single-allocation case; this table is the source of truth.
+    table: "income_payment_allocations",
+    columns: [
+      "id",
+      "payment_id",
+      "owner_id",
+      "condominium_id",
+      "amount",
+      "created_at",
+      "updated_at",
+    ],
+  },
 ];
