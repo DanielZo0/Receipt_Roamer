@@ -54,7 +54,7 @@ async function matchAndInsertPayment(
     .from("income_payments")
     .insert({
       owner_id: ownerMatch.owner_id,
-      condominium_id: ownerMatch.condominium_id,
+      matched_condominium_id: ownerMatch.condominium_id,
       payer_name: extracted.payer_name,
       amount: extracted.amount,
       currency: extracted.currency,

@@ -124,7 +124,7 @@ export const expectedSchema: { table: string; columns: string[] }[] = [
     columns: [
       "id",
       "owner_id",
-      "condominium_id",
+      "matched_condominium_id",
       "payer_name",
       "amount",
       "currency",
