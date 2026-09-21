@@ -1,7 +1,9 @@
 export type PaymentRow = {
   id: string;
   owner_id: string | null;
-  condominium_id: string | null;
+  /** What the extraction matcher thought, recorded at ingest. NOT a mirror of
+   *  the allocations -- it is the only association a payment with no owner has. */
+  matched_condominium_id: string | null;
   payer_name: string | null;
   amount: number | null;
   currency: string | null;

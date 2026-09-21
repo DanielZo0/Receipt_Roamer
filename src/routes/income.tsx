@@ -212,7 +212,7 @@ function IncomePage() {
    *  themselves, which is where the association actually lives now. */
   const condoNameForPayment = (p: PaymentRow, allocs: AllocationRow[]) => {
     const ids = [...new Set(allocs.map((a) => a.condominium_id).filter((id): id is string => !!id))];
-    if (ids.length === 0) return condoName(p.condominium_id);
+    if (ids.length === 0) return condoName(p.matched_condominium_id);
     if (ids.length === 1) return condoName(ids[0]);
     return `${ids.length} associations`;
   };
@@ -415,8 +415,11 @@ function IncomePage() {
       originalAllocations: AllocationRow[];
     }) => {
       const scalarFields = { ...fields };
-      delete scalarFields.owner_id; // owner now lives in allocations
-      delete scalarFields.condominium_id; // and the mirror is set by the RPC
+      // Owner lives in the allocations now; the RPC maintains the owner_id
+      // mirror. matched_condominium_id is deliberately absent from
+      // PAYMENT_EDITABLE_FIELDS -- it records what the matcher thought at
+      // ingest and nothing here may overwrite it.
+      delete scalarFields.owner_id;
 
       if (!draftIsUnchanged(payment, scalarFields)) {
         const { error } = await supabase
@@ -497,7 +500,7 @@ function IncomePage() {
             "",
             p.currency ?? "",
             p.reference_string ?? "",
-            condoName(p.condominium_id),
+            condoName(p.matched_condominium_id),
             "",
           ],
         ];

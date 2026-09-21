@@ -254,7 +254,7 @@ export type Database = {
         Row: {
           id: string;
           owner_id: string | null;
-          condominium_id: string | null;
+          matched_condominium_id: string | null;
           payer_name: string | null;
           amount: number | null;
           currency: string | null;
@@ -272,7 +272,7 @@ export type Database = {
         Insert: {
           id?: string;
           owner_id?: string | null;
-          condominium_id?: string | null;
+          matched_condominium_id?: string | null;
           payer_name?: string | null;
           amount?: number | null;
           currency?: string | null;
@@ -290,7 +290,7 @@ export type Database = {
         Update: {
           id?: string;
           owner_id?: string | null;
-          condominium_id?: string | null;
+          matched_condominium_id?: string | null;
           payer_name?: string | null;
           amount?: number | null;
           currency?: string | null;
@@ -314,8 +314,8 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "income_payments_condominium_id_fkey";
-            columns: ["condominium_id"];
+            foreignKeyName: "income_payments_matched_condominium_id_fkey";
+            columns: ["matched_condominium_id"];
             isOneToOne: false;
             referencedRelation: "associations";
             referencedColumns: ["id"];
